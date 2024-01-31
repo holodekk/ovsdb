@@ -1,42 +1,28 @@
-use ovsdb_rust::ovnnb;
-use ovsdb_rust::ovs::Client;
-use ovsdb_rust::ovsdb;
+use std::path::Path;
 
-fn list_bridges() {
-    let client = ovsdb::Client::connect_unix().unwrap();
-    match client.list::<ovsdb::Bridge>().unwrap() {
-        Some(bridges) => {
-            println!("Got some bridges:");
-            for bridge in &bridges {
-                println!("{:?}", bridge);
-            }
-        }
-        None => {
-            println!("Got nothing")
-        }
-    }
+use ovsdb::vswitch;
+use ovsdb::{
+    connect_unix,
+    request::{GetSchemaParams, Method},
+    response::Response,
+    schema::Schema,
+    Client, Connection,
+};
 
-    client.disconnect().unwrap();
-}
-
-fn list_switches() {
-    let client = ovnnb::Client::connect_unix().unwrap();
-    match client.list::<ovnnb::LogicalSwitch>().unwrap() {
-        Some(switches) => {
-            println!("Got some switches:");
-            for switch in &switches {
-                println!("{:?}", switch);
-            }
-        }
-        None => {
-            println!("Got nothing")
-        }
-    }
-
-    client.disconnect().unwrap();
+fn get_schema<T>(client: &Client<T>)
+where
+    T: Connection,
+{
+    let res: Response<Schema> = client
+        .execute(&Method::GetSchema(GetSchemaParams::new(
+            vswitch::DATABASE_NAME,
+        )))
+        .unwrap();
+    print!("schema: {:#?}", res.result);
 }
 
 fn main() {
-    list_bridges();
-    list_switches();
+    let client = connect_unix(Path::new("/var/run/openvswitch/db.sock")).unwrap();
+
+    get_schema(&client);
 }
