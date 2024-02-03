@@ -1,28 +1,18 @@
 use std::path::Path;
 
-use ovsdb::vswitch;
-use ovsdb::{
-    connect_unix,
-    request::{GetSchemaParams, Method},
-    response::Response,
-    schema::Schema,
-    Client, Connection,
-};
+use ovsdb::Client;
 
-fn get_schema<T>(client: &Client<T>)
-where
-    T: Connection,
-{
-    let res: Response<Schema> = client
-        .execute(&Method::GetSchema(GetSchemaParams::new(
-            vswitch::DATABASE_NAME,
-        )))
+#[tokio::main]
+async fn main() -> Result<(), std::io::Error> {
+    let mut client = Client::connect_unix(Path::new("/var/run/openvswitch/db.sock"))
+        .await
         .unwrap();
-    print!("schema: {:#?}", res.result);
-}
 
-fn main() {
-    let client = connect_unix(Path::new("/var/run/openvswitch/db.sock")).unwrap();
+    let res: Vec<String> = client.echo(vec![]).await.unwrap();
+    println!("Got an echo response: {:#?}", res);
 
-    get_schema(&client);
+    let s: ovsdb::schema::Schema = client.get_schema("Open_vSwitch").await.unwrap();
+    println!("Got a schema: {:#?}", s);
+
+    Ok(())
 }

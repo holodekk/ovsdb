@@ -2,10 +2,12 @@ use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 #[derive(Debug, Deserialize, PartialEq)]
-#[allow(non_camel_case_types)]
+// #[allow(non_camel_case_types)]
 pub enum RefType {
-    strong,
-    weak,
+    #[serde(rename = "strong")]
+    Strong,
+    #[serde(rename = "weak")]
+    Weak,
 }
 
 fn extract_options<'a, T>(c: &'a Option<&'a Value>) -> Result<Option<Vec<T>>, serde_json::Error>
@@ -366,7 +368,7 @@ mod tests {
         } = c.kind
         {
             assert_eq!(ref_table, Some("other_table".to_string()));
-            assert_eq!(ref_type, Some(RefType::weak));
+            assert_eq!(ref_type, Some(RefType::Weak));
         } else {
             panic!()
         }
