@@ -12,7 +12,6 @@ pub use connection::*;
 
 pub mod generator;
 
-pub mod codec;
 use crate::protocol;
 
 #[derive(thiserror::Error, Debug)]
@@ -32,7 +31,7 @@ pub enum Error {
     #[error("Shutdown error")]
     Shutdown(#[from] tokio::task::JoinError),
     #[error("Protocol error")]
-    Codec(#[from] codec::Error),
+    Codec(#[from] protocol::codec::Error),
 }
 
 pub trait Entity {

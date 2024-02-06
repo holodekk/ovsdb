@@ -1,3 +1,4 @@
+pub(crate) mod codec;
 mod request;
 pub use request::*;
 mod response;
