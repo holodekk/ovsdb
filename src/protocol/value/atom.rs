@@ -109,8 +109,8 @@ impl<'de> Deserialize<'de> for Atom {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ovsdb::Scalar;
-    use crate::ovsdb::Value;
+    use crate::protocol::Scalar;
+    use crate::protocol::Value;
 
     #[test]
     fn serialize_map() -> Result<(), serde_json::Error> {

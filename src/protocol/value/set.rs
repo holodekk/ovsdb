@@ -71,7 +71,7 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    use crate::ovsdb::{Atom, Map, Scalar};
+    use crate::protocol::{Atom, Map, Scalar};
 
     #[test]
     fn serialize_scalars() -> Result<(), serde_json::Error> {

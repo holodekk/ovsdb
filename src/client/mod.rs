@@ -10,10 +10,10 @@ use tokio::{
 mod connection;
 pub use connection::*;
 
+pub mod generator;
+
 pub mod codec;
-pub mod request;
-use request::*;
-pub mod response;
+use crate::protocol;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -41,12 +41,12 @@ pub trait Entity {
 
 pub enum ClientRequest {
     Single {
-        tx: oneshot::Sender<response::Response>,
-        request: Request,
+        tx: oneshot::Sender<protocol::Response>,
+        request: protocol::Request,
     },
     Monitor {
-        tx: mpsc::Sender<response::Response>,
-        request: Request,
+        tx: mpsc::Sender<protocol::Response>,
+        request: protocol::Request,
     },
 }
 
@@ -106,11 +106,11 @@ impl Client {
 
     pub async fn execute(
         &self,
-        method: Method,
-        params: Option<Vec<crate::ovsdb::Value>>,
-    ) -> Result<oneshot::Receiver<response::Response>, Error> {
+        method: protocol::Method,
+        params: Option<Vec<protocol::Value>>,
+    ) -> Result<oneshot::Receiver<protocol::Response>, Error> {
         let (tx, rx) = oneshot::channel();
-        let request = Request::new(method, params);
+        let request = protocol::Request::new(method, params);
 
         if let Some(s) = &self.request_sender {
             s.send(ClientRequest::Single { tx, request }).await?;
@@ -119,8 +119,8 @@ impl Client {
         Ok(rx)
     }
 
-    pub async fn echo(&self, params: EchoParams) -> Result<Vec<String>, Error> {
-        match self.execute(request::Method::Echo, Some(params.0)).await {
+    pub async fn echo(&self, params: protocol::EchoParams) -> Result<Vec<String>, Error> {
+        match self.execute(protocol::Method::Echo, Some(params.0)).await {
             Ok(rx) => match rx.await {
                 Ok(res) => {
                     let p: Vec<String> = serde_json::from_value(res.result)?;
@@ -135,8 +135,8 @@ impl Client {
     pub async fn get_schema(&self, database: &str) -> Result<crate::schema::Schema, Error> {
         match self
             .execute(
-                request::Method::GetSchema,
-                Some(vec![crate::ovsdb::Value::from(database)]),
+                protocol::Method::GetSchema,
+                Some(vec![protocol::Value::from(database)]),
             )
             .await
         {
@@ -160,9 +160,9 @@ async fn client_main<T>(
 where
     T: Connection,
 {
-    let mut oneshot_channels: HashMap<uuid::Uuid, oneshot::Sender<response::Response>> =
+    let mut oneshot_channels: HashMap<uuid::Uuid, oneshot::Sender<protocol::Response>> =
         HashMap::new();
-    let mut monitor_channels: HashMap<uuid::Uuid, mpsc::Sender<response::Response>> =
+    let mut monitor_channels: HashMap<uuid::Uuid, mpsc::Sender<protocol::Response>> =
         HashMap::new();
 
     loop {
@@ -187,7 +187,7 @@ where
                 }
             }
             Some(data) = conn.next() => {
-                let res: response::Response = serde_json::from_value(data?)?;
+                let res: protocol::Response = serde_json::from_value(data?)?;
                 if let Some(tx) = oneshot_channels.remove(&res.id) {
                     let _ = tx.send(res);
                 } else if let Some(tx) = monitor_channels.get(&res.id) {

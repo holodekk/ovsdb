@@ -1,6 +1,6 @@
 use serde::{ser::SerializeMap, Serialize, Serializer};
 
-use crate::ovsdb::Value;
+use crate::protocol::Value;
 
 #[derive(Debug)]
 pub struct EchoParams(pub Vec<Value>);
@@ -35,11 +35,11 @@ impl Method {
 pub struct Request {
     pub id: uuid::Uuid,
     pub method: Method,
-    pub params: Option<Vec<crate::ovsdb::Value>>,
+    pub params: Option<Vec<Value>>,
 }
 
 impl Request {
-    pub fn new(method: Method, params: Option<Vec<crate::ovsdb::Value>>) -> Self {
+    pub fn new(method: Method, params: Option<Vec<Value>>) -> Self {
         Self {
             id: uuid::Uuid::new_v4(),
             method,

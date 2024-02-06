@@ -9,7 +9,7 @@ use tokio::{
 use tokio_util::codec::FramedRead;
 
 use super::codec;
-use super::request::Request;
+use super::protocol::Request;
 
 #[async_trait]
 pub trait Connection {

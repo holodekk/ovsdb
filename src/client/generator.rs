@@ -29,7 +29,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 //     Ok(())
 // }
 
-pub fn generate_api(schema: &Schema, directory: &Path) -> Result<()> {
+pub fn generate_models(schema: &Schema, directory: &Path) -> Result<()> {
     std::fs::create_dir_all(directory)?;
 
     let mod_filename = directory.join("mod.rs");
