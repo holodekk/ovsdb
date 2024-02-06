@@ -122,7 +122,7 @@ pub struct Client {
 }
 
 pub fn generate_models(s: &Schema) -> Vec<Model> {
-    s.tables.iter().map(generate_model).collect()
+    s.tables.iter().map(Model::generate_model).collect()
 }
 
 pub fn generate_client(s: &Schema) -> Client {
@@ -137,27 +137,31 @@ pub fn generate_client(s: &Schema) -> Client {
     }
 }
 
-pub fn output_tokens(output_file: &mut File, tokens: &TokenStream) {
-    let parsed: syn::File = syn::parse2(tokens.clone()).unwrap();
+pub fn output_tokens(output_file: &mut File, tokens: &TokenStream) -> Result<(), std::io::Error> {
+    let parsed: syn::File = syn::parse2(tokens.clone())
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "foo"))?;
     let o = prettyplease::unparse(&parsed);
-    output_file.write_all(o.as_bytes()).unwrap();
+    output_file.write_all(o.as_bytes())?;
+    output_file.write_all(b"\n")
 }
 
-pub fn output_client(schema: &Schema, filename: &Path) {
-    let mut output_file = File::create(filename).unwrap();
+pub fn output_client(schema: &Schema, filename: &Path) -> Result<(), std::io::Error> {
+    let mut output_file = File::create(filename)?;
 
     let client = generate_client(schema);
 
-    output_tokens(&mut output_file, &client.use_declarations);
-    output_file.write_all(b"\n").unwrap();
+    output_tokens(&mut output_file, &client.use_declarations)?;
+    output_file.write_all(b"\n")?;
 
-    output_tokens(&mut output_file, &client.consts);
-    output_file.write_all(b"\n").unwrap();
+    output_tokens(&mut output_file, &client.consts)?;
+    output_file.write_all(b"\n")?;
 
-    client.models.iter().for_each(|m| {
-        output_tokens(&mut output_file, &m.model_def);
-        output_file.write_all(b"\n").unwrap();
-        output_tokens(&mut output_file, &m.model_impl);
-        output_file.write_all(b"\n").unwrap();
-    });
+    client
+        .models
+        .iter()
+        .map(|m: &Model| -> Result<(), std::io::Error> {
+            output_tokens(&mut output_file, &m.model_def)?;
+            output_tokens(&mut output_file, &m.model_impl)
+        })
+        .collect()
 }

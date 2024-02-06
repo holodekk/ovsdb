@@ -1,19 +1,18 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
 use tokio::{
     net::UnixStream,
     sync::{mpsc, oneshot},
     task::JoinHandle,
 };
-use uuid::Uuid;
 
 mod connection;
 pub use connection::*;
 
 pub mod codec;
 pub mod request;
+use request::*;
 pub mod response;
 
 #[derive(thiserror::Error, Debug)]
@@ -24,35 +23,52 @@ pub enum Error {
     NotConnected,
     #[error("Unexpected IO Error")]
     Io(#[from] std::io::Error),
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-#[allow(non_camel_case_types)]
-pub enum Atom {
-    map(String, Vec<(String, String)>),
-    set(String, Vec<Atom>),
-    uuid(String, Uuid),
+    #[error("Serialization/deserialization Error")]
+    Serde(#[from] serde_json::Error),
+    #[error("Internal synchronization error")]
+    Synchronization(#[from] mpsc::error::SendError<ClientRequest>),
+    #[error("Internal synchronization error")]
+    InternalSync(#[from] mpsc::error::SendError<ClientCommand>),
+    #[error("Shutdown error")]
+    Shutdown(#[from] tokio::task::JoinError),
+    #[error("Protocol error")]
+    Codec(#[from] codec::Error),
 }
 
 pub trait Entity {
-    fn table_name() -> &'static str;
+    fn table_name(&self) -> &'static str;
 }
 
-pub struct Payload {
-    tx: oneshot::Sender<response::Response>,
-    request: request::Request,
+pub enum ClientRequest {
+    Single {
+        tx: oneshot::Sender<response::Response>,
+        request: Request,
+    },
+    Monitor {
+        tx: mpsc::Sender<response::Response>,
+        request: Request,
+    },
+}
+
+pub enum ClientCommand {
+    Shutdown,
 }
 
 pub struct Client {
-    pub sender: Option<mpsc::Sender<Payload>>,
-    pub handle: JoinHandle<()>,
+    pub request_sender: Option<mpsc::Sender<ClientRequest>>,
+    pub command_sender: Option<mpsc::Sender<ClientCommand>>,
+    pub handle: JoinHandle<Result<(), Error>>,
 }
 
 impl Client {
-    pub fn new(sender: mpsc::Sender<Payload>, handle: JoinHandle<()>) -> Self {
+    pub fn new(
+        request_sender: mpsc::Sender<ClientRequest>,
+        command_sender: mpsc::Sender<ClientCommand>,
+        handle: JoinHandle<Result<(), Error>>,
+    ) -> Self {
         Self {
-            sender: Some(sender),
+            request_sender: Some(request_sender),
+            command_sender: Some(command_sender),
             handle,
         }
     }
@@ -62,50 +78,52 @@ impl Client {
         T: Connection + Send + 'static,
     {
         let (requests_tx, requests_rx) = mpsc::channel(32);
+        let (commands_tx, commands_rx) = mpsc::channel(32);
 
-        let handle = {
-            println!("Spawning client_main()");
-            tokio::spawn(async move { client_main(requests_rx, conn).await.unwrap() })
-        };
+        let handle =
+            { tokio::spawn(async move { client_main(requests_rx, commands_rx, conn).await }) };
 
-        Ok(Client::new(requests_tx, handle))
+        Ok(Client::new(requests_tx, commands_tx, handle))
     }
 
     pub async fn connect_unix(socket: &Path) -> Result<Client, Error> {
         let stream = UnixStream::connect(socket).await?;
         let conn = UnixConnection::new(stream);
-        // let rpc = rpc::Rpc::start(conn).await.unwrap();
         Client::start(conn).await
     }
 
-    pub async fn execute<P>(
-        &mut self,
-        method: request::Method,
-        params: Option<P>,
-    ) -> Result<oneshot::Receiver<response::Response>, crate::Error>
-    where
-        P: Serialize,
-    {
-        println!("Client::execute({:?})", method);
-        let (tx, rx) = oneshot::channel();
-        let p = match params {
-            Some(v) => serde_json::to_value(v).unwrap(),
-            None => serde_json::to_value::<Vec<i32>>(vec![]).unwrap(),
+    pub async fn stop(mut self) -> Result<(), Error> {
+        if let Some(sender) = self.command_sender.take() {
+            sender.send(ClientCommand::Shutdown).await?;
+            drop(sender);
         };
-        let request = request::Request::new(method, p);
+        if let Some(sender) = self.request_sender.take() {
+            drop(sender);
+        }
 
-        if let Some(s) = &self.sender {
-            s.send(Payload { tx, request }).await.unwrap();
+        self.handle.await?
+    }
+
+    pub async fn execute(
+        &self,
+        method: Method,
+        params: Option<Vec<crate::ovsdb::Value>>,
+    ) -> Result<oneshot::Receiver<response::Response>, Error> {
+        let (tx, rx) = oneshot::channel();
+        let request = Request::new(method, params);
+
+        if let Some(s) = &self.request_sender {
+            s.send(ClientRequest::Single { tx, request }).await?;
         }
 
         Ok(rx)
     }
 
-    pub async fn echo(&mut self, params: Vec<String>) -> Result<Vec<String>, Error> {
-        match self.execute(request::Method::Echo, Some(params)).await {
+    pub async fn echo(&self, params: EchoParams) -> Result<Vec<String>, Error> {
+        match self.execute(request::Method::Echo, Some(params.0)).await {
             Ok(rx) => match rx.await {
                 Ok(res) => {
-                    let p: Vec<String> = serde_json::from_value(res.result).unwrap();
+                    let p: Vec<String> = serde_json::from_value(res.result)?;
                     Ok(p)
                 }
                 Err(_err) => Err(Error::Unknown),
@@ -114,14 +132,17 @@ impl Client {
         }
     }
 
-    pub async fn get_schema(&mut self, database: &str) -> Result<crate::schema::Schema, Error> {
+    pub async fn get_schema(&self, database: &str) -> Result<crate::schema::Schema, Error> {
         match self
-            .execute(request::Method::GetSchema, Some(vec![database]))
+            .execute(
+                request::Method::GetSchema,
+                Some(vec![crate::ovsdb::Value::from(database)]),
+            )
             .await
         {
             Ok(rx) => match rx.await {
                 Ok(res) => {
-                    let s: crate::schema::Schema = serde_json::from_value(res.result).unwrap();
+                    let s: crate::schema::Schema = serde_json::from_value(res.result)?;
                     Ok(s)
                 }
                 Err(_err) => Err(Error::Unknown),
@@ -132,28 +153,48 @@ impl Client {
 }
 
 async fn client_main<T>(
-    mut requests: mpsc::Receiver<Payload>,
+    mut requests: mpsc::Receiver<ClientRequest>,
+    mut commands: mpsc::Receiver<ClientCommand>,
     mut conn: T,
-) -> Result<(), std::io::Error>
+) -> Result<(), Error>
 where
     T: Connection,
 {
-    let mut channels: HashMap<uuid::Uuid, oneshot::Sender<response::Response>> = HashMap::new();
+    let mut oneshot_channels: HashMap<uuid::Uuid, oneshot::Sender<response::Response>> =
+        HashMap::new();
+    let mut monitor_channels: HashMap<uuid::Uuid, mpsc::Sender<response::Response>> =
+        HashMap::new();
 
     loop {
         tokio::select! {
-            Some(payload) = requests.recv() => {
-                channels.insert(payload.request.id, payload.tx);
-                conn.send(payload.request).await?;
-            }
-            Some(data) = conn.next() => {
-                let res: response::Response = serde_json::from_value(data.unwrap())?;
-                if let Some(tx) = channels.remove(&res.id) {
-                    tx.send(res).unwrap();
+            Some(msg) = requests.recv() => {
+                match msg {
+                    ClientRequest::Single { tx, request } => {
+                        oneshot_channels.insert(request.id, tx);
+                        conn.send(request).await?;
+                    },
+                    ClientRequest::Monitor { tx, request } => {
+                        monitor_channels.insert(request.id, tx);
+                        conn.send(request).await?;
+                    }
+                }
+            },
+            Some(cmd) = commands.recv() => {
+                match cmd {
+                    ClientCommand::Shutdown => {
+                        conn.shutdown().await?;
+                    }
                 }
             }
+            Some(data) = conn.next() => {
+                let res: response::Response = serde_json::from_value(data?)?;
+                if let Some(tx) = oneshot_channels.remove(&res.id) {
+                    let _ = tx.send(res);
+                } else if let Some(tx) = monitor_channels.get(&res.id) {
+                    let _ = tx.send(res).await;
+                }
+            },
             else => {
-                println!("All senders closed.  Exiting.");
                 break;
             }
         }

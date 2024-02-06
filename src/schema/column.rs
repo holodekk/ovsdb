@@ -1,134 +1,12 @@
+use convert_case::{Case, Casing};
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote, ToTokens};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-#[derive(Debug, Deserialize, PartialEq)]
-// #[allow(non_camel_case_types)]
-pub enum RefType {
-    #[serde(rename = "strong")]
-    Strong,
-    #[serde(rename = "weak")]
-    Weak,
-}
+use super::DataType;
 
-fn extract_options<'a, T>(c: &'a Option<&'a Value>) -> Result<Option<Vec<T>>, serde_json::Error>
-where
-    T: Deserialize<'a>,
-{
-    if let Some(o) = c {
-        if o.is_array() {
-            let s = o.as_array().unwrap();
-            assert_eq!(s.len(), 2);
-
-            if s[0].as_str().unwrap() == "set" {
-                let values: Vec<T> = s[1]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|v| T::deserialize(v).unwrap())
-                    .collect();
-                return Ok(Some(values));
-            }
-        }
-    }
-    Ok(None)
-}
-
-#[derive(Debug, Default, PartialEq)]
-pub struct Constraints<T, O> {
-    min: Option<T>,
-    max: Option<T>,
-    options: Option<Vec<O>>,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum DataType {
-    Boolean,
-    Integer(Constraints<i64, i64>),
-    Real(Constraints<f64, f64>),
-    String(Constraints<i64, String>),
-    Uuid {
-        ref_table: Option<String>,
-        ref_type: Option<RefType>,
-    },
-    Map {
-        key: Box<DataType>,
-        value: Box<DataType>,
-    },
-    Unknown,
-}
-
-impl DataType {
-    pub fn is_enum(&self) -> bool {
-        match self {
-            Self::Integer(c) => c.options.is_some(),
-            Self::Real(c) => c.options.is_some(),
-            Self::String(c) => c.options.is_some(),
-            _ => false,
-        }
-    }
-
-    pub fn from_value(data: &Value) -> Result<Self, serde_json::Error> {
-        let kind = match data {
-            Value::String(s) => match s.as_str() {
-                "boolean" => Self::Boolean,
-                "integer" => Self::Integer(Constraints::default()),
-                "real" => Self::Real(Constraints::default()),
-                "string" => Self::String(Constraints::default()),
-                "uuid" => Self::Uuid {
-                    ref_table: None,
-                    ref_type: None,
-                },
-                _ => Self::Unknown,
-            },
-            Value::Object(o) => {
-                let type_obj = o.get("type").unwrap();
-                match type_obj {
-                    Value::String(s) => match s.as_str() {
-                        "boolean" => Self::Boolean,
-                        "integer" => Self::Integer(Constraints {
-                            options: extract_options(&o.get("enum")).unwrap(),
-                            min: o.get("minInteger").map(|v| v.as_i64().unwrap()),
-                            max: o.get("maxInteger").map(|v| v.as_i64().unwrap()),
-                        }),
-                        "real" => Self::Real(Constraints {
-                            options: extract_options(&o.get("enum")).unwrap(),
-                            min: o.get("minReal").map(|v| v.as_f64().unwrap()),
-                            max: o.get("maxReal").map(|v| v.as_f64().unwrap()),
-                        }),
-                        "string" => Self::String(Constraints {
-                            options: extract_options(&o.get("enum")).unwrap(),
-                            min: o.get("minLength").map(|v| v.as_i64().unwrap()),
-                            max: o.get("maxLength").map(|v| v.as_i64().unwrap()),
-                        }),
-                        "uuid" => Self::Uuid {
-                            ref_table: o.get("refTable").map(|v| v.as_str().unwrap().to_string()),
-                            ref_type: o.get("refType").map(|t| RefType::deserialize(t).unwrap()),
-                        },
-                        _ => Self::Unknown,
-                    },
-                    Value::Object(typ) => {
-                        let key = Self::from_value(typ.get("key").unwrap()).unwrap();
-                        if typ.contains_key("value") {
-                            let value = Self::from_value(typ.get("value").unwrap()).unwrap();
-                            Self::Map {
-                                key: Box::new(key),
-                                value: Box::new(value),
-                            }
-                        } else {
-                            key
-                        }
-                    }
-                    _ => Self::Unknown,
-                }
-            }
-            _ => Self::Unknown,
-        };
-
-        Ok(kind)
-    }
-}
-
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Column {
     pub name: String,
     pub kind: DataType,
@@ -140,20 +18,25 @@ pub struct Column {
 
 impl Column {
     pub fn is_set(&self) -> bool {
-        if self.min.is_some()
-            && self.max.is_some()
-            && (self.min.unwrap() != 1 || self.max.unwrap() != 1)
-        {
-            if self.kind.is_enum() {
-                if self.max.unwrap() != 1 {
-                    return true;
+        match self.kind {
+            DataType::Map { .. } => false,
+            _ => {
+                if self.min.is_some()
+                    && self.max.is_some()
+                    && (self.min.unwrap() != 1 || self.max.unwrap() != 1)
+                {
+                    if self.kind.is_enum() {
+                        if self.max.unwrap() != 1 {
+                            return true;
+                        }
+                    } else {
+                        return true;
+                    }
                 }
-            } else {
-                return true;
+
+                false
             }
         }
-
-        false
     }
 
     pub fn is_optional(&self) -> bool {
@@ -207,9 +90,28 @@ impl<'de> Deserialize<'de> for Column {
     }
 }
 
+impl ToTokens for Column {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let attr_name = match &self.name == "type" {
+            true => format_ident!("{}", "kind"),
+            _ => format_ident!("{}", &self.name.to_case(Case::Snake)),
+        };
+        let attr_type = match self.is_set() {
+            true => {
+                let kind = self.kind.to_token_stream();
+                quote! { Vec<#kind> }
+            }
+            false => self.kind.to_token_stream(),
+        };
+        tokens.extend(quote! { #attr_name: #attr_type });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::schema::RefType;
 
     #[test]
     fn handles_boolean() {

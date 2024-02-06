@@ -9,6 +9,14 @@ pub enum BufferTag {
     Str,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Unexpected IO Error")]
+    Io(#[from] std::io::Error),
+    #[error("JSON protocol Error")]
+    Serde(#[from] serde_json::Error),
+}
+
 #[derive(Default)]
 pub struct JsonCodec {
     data: Vec<u8>,
@@ -20,7 +28,10 @@ impl JsonCodec {
         Self::default()
     }
 
-    fn try_decode_object(&mut self, src: &[u8]) -> (Option<Value>, usize) {
+    fn try_decode_object(
+        &mut self,
+        src: &[u8],
+    ) -> Result<(Option<Value>, usize), serde_json::Error> {
         let mut offset = 0;
 
         while offset < src.len() {
@@ -50,9 +61,9 @@ impl JsonCodec {
                                 if self.tags.is_empty() {
                                     // We have a full object
                                     self.data.extend_from_slice(src);
-                                    let obj = serde_json::from_slice(&self.data.to_vec()).unwrap();
+                                    let obj = serde_json::from_slice(&self.data.to_vec())?;
                                     self.data.clear();
-                                    return (Some(obj), offset);
+                                    return Ok((Some(obj), offset));
                                 }
                             }
                             _ => unreachable!(),
@@ -73,16 +84,16 @@ impl JsonCodec {
         }
 
         self.data.extend_from_slice(src);
-        (None, src.len())
+        Ok((None, src.len()))
     }
 }
 
 impl Decoder for JsonCodec {
     type Item = Value;
-    type Error = std::io::Error;
+    type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let (res, consume) = self.try_decode_object(src.chunk());
+        let (res, consume) = self.try_decode_object(src.chunk())?;
         src.advance(consume);
         Ok(res)
     }

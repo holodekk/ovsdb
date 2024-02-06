@@ -5,11 +5,15 @@ use std::path::Path;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-pub mod column;
-pub mod models;
-pub mod table;
+mod column;
+pub use column::Column;
+mod data_type;
+pub use data_type::{Constraints, DataType, RefType};
+mod table;
+pub use table::Table;
 
-use table::Table;
+#[derive(thiserror::Error, Debug)]
+pub enum Error {}
 
 #[derive(Debug, Deserialize)]
 pub struct Schema {
@@ -24,17 +28,17 @@ fn deserialize_tables<'de, D>(de: D) -> Result<Vec<Table>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let tables = Value::deserialize(de)?
+    Value::deserialize(de)?
         .as_object()
         .expect("convert schema `tables` to json object")
         .iter()
-        .map(|(k, v)| {
-            let mut t: Table = Table::deserialize(v).unwrap();
+        .map(|(k, v)| -> Result<Table, serde_json::Error> {
+            let mut t: Table = Table::deserialize(v)?;
             t.name = k.to_string();
-            t
+            Ok(t)
         })
-        .collect();
-    Ok(tables)
+        .collect::<Result<Vec<Table>, serde_json::Error>>()
+        .map_err(serde::de::Error::custom)
 }
 
 impl Schema {
