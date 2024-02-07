@@ -1,7 +1,5 @@
 use serde::{ser::SerializeMap, Serialize, Serializer};
 
-use super::Value;
-
 mod method;
 pub use method::*;
 mod params;

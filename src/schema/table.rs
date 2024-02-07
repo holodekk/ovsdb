@@ -24,8 +24,7 @@ impl ToTokens for Table {
         let imp = TableImpl(self).to_token_stream();
 
         tokens.extend(quote! {
-            use std::collections::BTreeMap;
-            use serde::Deserialize;
+            use serde::{Deserialize, Serialize};
 
             use ovsdb::{protocol, Entity};
 
@@ -43,7 +42,7 @@ impl<'a> ToTokens for TableDef<'a> {
             self.0.columns.iter().map(|c| c.to_token_stream()).collect();
         let table_name = format_ident!("{}", self.0.name.to_case(Case::UpperCamel));
         let table_tokens = quote! {
-            #[derive(Debug, Deserialize)]
+            #[derive(Debug, Deserialize, Serialize)]
             pub struct #table_name {
                 #( #column_tokens),*
             }
@@ -70,7 +69,7 @@ impl<'a> ToTokens for TableImpl<'a> {
         let table = self.0.name.to_string();
         tokens.extend(quote! {
             impl Entity for #table_ident {
-              fn table_name(&self) -> &'static str {
+              fn table_name() -> &'static str {
                 #table
               }
             }

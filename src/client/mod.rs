@@ -38,7 +38,7 @@ pub enum Error {
 }
 
 pub trait Entity {
-    fn table_name(&self) -> &'static str;
+    fn table_name() -> &'static str;
 }
 
 pub enum ClientRequest {
@@ -129,27 +129,30 @@ impl Client {
         }
     }
 
-    pub async fn echo<P, I>(&self, params: P) -> Result<Vec<String>, Error>
+    pub async fn echo<P, I>(&self, args: P) -> Result<Vec<String>, Error>
     where
         P: IntoIterator<Item = I>,
-        I: Into<protocol::Value>,
+        I: Into<String>,
     {
-        self.execute(protocol::Method::Echo, protocol::Params::new(params))
-            .await
+        let params = protocol::Params::Echo(args.into_iter().map(|v| v.into()).collect());
+        self.execute(protocol::Method::Echo, params).await
     }
 
     pub async fn list_databases(&self) -> Result<Vec<String>, Error> {
-        self.execute(protocol::Method::ListDatabases, protocol::Params::default())
-            .await
+        self.execute(
+            protocol::Method::ListDatabases,
+            protocol::Params::ListDatabases,
+        )
+        .await
     }
 
     pub async fn get_schema<S>(&self, database: S) -> Result<crate::schema::Schema, Error>
     where
-        S: Into<protocol::Value>,
+        S: Into<String>,
     {
         self.execute(
             protocol::Method::GetSchema,
-            protocol::Params::new(vec![database]),
+            protocol::Params::GetSchema(database.into()),
         )
         .await
     }
