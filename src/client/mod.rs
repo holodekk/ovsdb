@@ -116,7 +116,6 @@ impl Client {
     where
         T: DeserializeOwned,
     {
-        println!("Params: {}", params);
         let (tx, rx) = oneshot::channel();
 
         match &self.request_sender {

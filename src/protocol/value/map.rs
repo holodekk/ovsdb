@@ -9,11 +9,11 @@ use serde::{
     Deserialize, Serialize,
 };
 
-use super::Scalar;
+use super::Value;
 
 /// Represents a `map` within ovsdb.
 #[derive(Debug, PartialEq)]
-pub struct Map(pub BTreeMap<String, Scalar>);
+pub struct Map(pub BTreeMap<String, Value>);
 
 impl fmt::Display for Map {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -31,10 +31,10 @@ impl fmt::Display for Map {
 impl<K, V> From<BTreeMap<K, V>> for Map
 where
     K: ToString + Ord,
-    V: Into<Scalar>,
+    V: Into<Value>,
 {
     fn from(value: BTreeMap<K, V>) -> Self {
-        let mut map: BTreeMap<String, Scalar> = BTreeMap::new();
+        let mut map: BTreeMap<String, Value> = BTreeMap::new();
         for (k, v) in value {
             map.insert(k.to_string(), v.into());
         }
@@ -43,7 +43,7 @@ where
 }
 
 impl Deref for Map {
-    type Target = BTreeMap<String, Scalar>;
+    type Target = BTreeMap<String, Value>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -81,11 +81,11 @@ impl<'de> Deserialize<'de> for Map {
             where
                 M: MapAccess<'de>,
             {
-                let mut map: BTreeMap<String, Scalar> = BTreeMap::new();
+                let mut map: BTreeMap<String, Value> = BTreeMap::new();
 
                 while let Some((k, v)) = value.next_entry()? {
                     let key: String = k;
-                    let value: Scalar = v;
+                    let value: Value = v;
 
                     map.insert(key, value);
                 }
@@ -105,8 +105,8 @@ mod tests {
     #[test]
     fn serialize() -> Result<(), serde_json::Error> {
         let expected = r#"{"color":"blue"}"#;
-        let mut map: BTreeMap<String, Scalar> = BTreeMap::new();
-        map.insert("color".to_string(), Scalar::from("blue"));
+        let mut map: BTreeMap<String, Value> = BTreeMap::new();
+        map.insert("color".to_string(), Value::from("blue"));
         let value = Map(map);
         let json = serde_json::to_string(&value)?;
         assert_eq!(json, expected);
@@ -117,7 +117,7 @@ mod tests {
     fn deserialize() -> Result<(), serde_json::Error> {
         let data = r#"{"color":"blue"}"#;
         let map: Map = serde_json::from_str(data)?;
-        assert_eq!(map.get("color").unwrap(), &Scalar::from("blue"));
+        assert_eq!(map.get("color").unwrap(), &Value::from("blue"));
         Ok(())
     }
 }

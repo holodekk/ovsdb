@@ -29,10 +29,9 @@ impl fmt::Display for Params {
         write!(f, "[")?;
         for (idx, item) in self.0.iter().enumerate() {
             if idx > 0 {
-                write!(f, ", {}", item)?;
-            } else {
-                write!(f, "{}", item)?;
+                write!(f, ", ")?;
             }
+            write!(f, "{}", item)?;
         }
         write!(f, "]")
     }

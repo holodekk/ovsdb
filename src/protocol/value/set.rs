@@ -103,10 +103,10 @@ mod tests {
     #[test]
     fn serialize_maps() -> Result<(), serde_json::Error> {
         let expected = r#"[["map",{"name":"one"}],["map",{"name":"two"}]]"#;
-        let mut map1: BTreeMap<String, Scalar> = BTreeMap::new();
-        map1.insert("name".to_string(), Scalar::from("one"));
-        let mut map2: BTreeMap<String, Scalar> = BTreeMap::new();
-        map2.insert("name".to_string(), Scalar::from("two"));
+        let mut map1: BTreeMap<String, Value> = BTreeMap::new();
+        map1.insert("name".to_string(), Value::from("one"));
+        let mut map2: BTreeMap<String, Value> = BTreeMap::new();
+        map2.insert("name".to_string(), Value::from("two"));
         let value = Set(vec![
             Value::Atom(Atom::Map(Map(map1))),
             Value::Atom(Atom::Map(Map(map2))),

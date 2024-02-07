@@ -27,7 +27,7 @@ impl ToTokens for Table {
             use std::collections::BTreeMap;
             use serde::Deserialize;
 
-            use ovsdb::Entity;
+            use ovsdb::{protocol, Entity};
 
             #def
             #imp
@@ -45,7 +45,7 @@ impl<'a> ToTokens for TableDef<'a> {
         let table_tokens = quote! {
             #[derive(Debug, Deserialize)]
             pub struct #table_name {
-                #(pub #column_tokens),*
+                #( #column_tokens),*
             }
         };
         tokens.extend(table_tokens);

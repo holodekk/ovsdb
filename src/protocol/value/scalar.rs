@@ -1,4 +1,4 @@
-use std::convert::From;
+use std::convert::{From, TryFrom};
 use std::fmt;
 
 use serde::{
@@ -37,6 +37,17 @@ impl From<bool> for Scalar {
     }
 }
 
+impl TryFrom<Scalar> for bool {
+    type Error = &'static str;
+
+    fn try_from(value: Scalar) -> Result<Self, Self::Error> {
+        match value {
+            Scalar::Boolean(b) => Ok(b),
+            _ => Err("Invalid conversion"),
+        }
+    }
+}
+
 impl From<i32> for Scalar {
     fn from(value: i32) -> Scalar {
         Scalar::Integer(value.try_into().unwrap())
@@ -48,6 +59,25 @@ impl From<i64> for Scalar {
         Scalar::Integer(value)
     }
 }
+
+impl TryFrom<Scalar> for i64 {
+    type Error = &'static str;
+
+    fn try_from(value: Scalar) -> Result<Self, Self::Error> {
+        match value {
+            Scalar::Integer(i) => Ok(i),
+            _ => Err("Invalid conversion"),
+        }
+    }
+}
+
+// impl TryFrom<String> for i64 {
+//     type Error = std::num::ParseIntError;
+
+//     fn try_from(value: String) -> Result<Self, Self::Error> {
+//         value.parse()
+//     }
+// }
 
 impl From<u64> for Scalar {
     fn from(value: u64) -> Scalar {
@@ -61,6 +91,17 @@ impl From<f64> for Scalar {
     }
 }
 
+impl TryFrom<Scalar> for f64 {
+    type Error = &'static str;
+
+    fn try_from(value: Scalar) -> Result<Self, Self::Error> {
+        match value {
+            Scalar::Real(f) => Ok(f),
+            _ => Err("Invalid conversion"),
+        }
+    }
+}
+
 impl From<&str> for Scalar {
     fn from(value: &str) -> Scalar {
         Scalar::String(value.to_string())
@@ -70,6 +111,17 @@ impl From<&str> for Scalar {
 impl From<String> for Scalar {
     fn from(value: String) -> Scalar {
         Scalar::String(value)
+    }
+}
+
+impl TryFrom<Scalar> for String {
+    type Error = &'static str;
+
+    fn try_from(value: Scalar) -> Result<Self, Self::Error> {
+        match value {
+            Scalar::String(s) => Ok(s),
+            _ => Err("Invalid conversion"),
+        }
     }
 }
 

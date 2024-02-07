@@ -103,7 +103,50 @@ impl ToTokens for Column {
             }
             false => self.kind.to_token_stream(),
         };
-        tokens.extend(quote! { #attr_name: #attr_type });
+        let mut serializer: String;
+        let mut deserializer: String;
+        if self.is_set() {
+            serializer = "from_set".to_string();
+            deserializer = "to_set".to_string();
+        } else {
+            match self.kind {
+                DataType::Unknown => {
+                    unimplemented!()
+                }
+                DataType::Boolean => {
+                    serializer = "from_bool".to_string();
+                    deserializer = "to_bool".to_string();
+                }
+                DataType::Integer(_) => {
+                    serializer = "from_i64".to_string();
+                    deserializer = "to_i64".to_string();
+                }
+                DataType::Real(_) => {
+                    serializer = "from_f64".to_string();
+                    deserializer = "to_f64".to_string();
+                }
+                DataType::String(_) => {
+                    serializer = "from_string".to_string();
+                    deserializer = "to_string".to_string();
+                }
+                DataType::Map { .. } => {
+                    serializer = "from_map".to_string();
+                    deserializer = "to_map".to_string();
+                }
+                DataType::Uuid { .. } => {
+                    serializer = "from_uuid".to_string();
+                    deserializer = "to_uuid".to_string();
+                }
+            }
+        }
+        serializer = format!("protocol::{}", serializer);
+        deserializer = format!("protocol::{}", deserializer);
+
+        // #[serde(flatten)]
+        tokens.extend(quote! {
+            #[serde(serialize_with = #serializer, deserialize_with = #deserializer)]
+            pub #attr_name: #attr_type
+        });
     }
 }
 

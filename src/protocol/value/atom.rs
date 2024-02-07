@@ -160,7 +160,7 @@ mod tests {
         let atom: Atom = serde_json::from_str(data)?;
         match atom {
             Atom::Map(m) => {
-                assert_eq!(m.get("color").unwrap(), &Scalar::from("blue"));
+                assert_eq!(m.get("color").unwrap(), &Value::from("blue"));
             }
             _ => panic!("Invalid atom for map: {:#?}", atom),
         }

@@ -45,6 +45,17 @@ impl From<i64> for Value {
     }
 }
 
+impl TryFrom<Value> for i64 {
+    type Error = &'static str;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Scalar(Scalar::Integer(i)) => Ok(i),
+            _ => Err("Invalid conversion"),
+        }
+    }
+}
+
 impl From<f64> for Value {
     fn from(value: f64) -> Value {
         Value::Scalar(Scalar::Real(value))
@@ -63,9 +74,31 @@ impl From<String> for Value {
     }
 }
 
+impl TryFrom<Value> for String {
+    type Error = &'static str;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Scalar(Scalar::String(s)) => Ok(s),
+            _ => Err("Invalid conversion"),
+        }
+    }
+}
+
 impl From<Uuid> for Value {
     fn from(value: Uuid) -> Value {
         Self::Atom(Atom::Uuid(value))
+    }
+}
+
+impl TryFrom<Value> for ::uuid::Uuid {
+    type Error = &'static str;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Atom(Atom::Uuid(Uuid(u))) => Ok(u),
+            _ => Err("Invalid conversion"),
+        }
     }
 }
 
@@ -209,7 +242,7 @@ mod tests {
         let value: Value = serde_json::from_str(data)?;
         match value {
             Value::Atom(Atom::Map(m)) => {
-                assert_eq!(m.get("color").unwrap(), &Scalar::from("blue"));
+                assert_eq!(m.get("color").unwrap(), &Value::from("blue"));
             }
             _ => panic!("Invalid value for map: {:#?}", value),
         }

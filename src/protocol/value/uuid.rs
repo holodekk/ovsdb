@@ -11,7 +11,7 @@ use serde::{
 
 /// A representation of a UUID value within OVSDB.
 #[derive(Debug, PartialEq)]
-pub struct Uuid(_Uuid);
+pub struct Uuid(pub _Uuid);
 
 impl Uuid {
     /// generates a new random Uuid
