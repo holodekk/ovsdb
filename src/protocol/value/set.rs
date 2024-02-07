@@ -1,3 +1,4 @@
+use std::fmt;
 use std::ops::Deref;
 
 use serde::{
@@ -11,6 +12,19 @@ use super::Value;
 /// Represents a `set` within ovsdb.
 #[derive(Debug, PartialEq)]
 pub struct Set(pub Vec<Value>);
+
+impl fmt::Display for Set {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[")?;
+        for (idx, value) in self.0.iter().enumerate() {
+            if idx > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", value)?;
+        }
+        write!(f, "]")
+    }
+}
 
 impl Deref for Set {
     type Target = Vec<Value>;

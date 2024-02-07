@@ -1,4 +1,5 @@
 use std::convert::From;
+use std::fmt;
 
 use serde::{
     de::{self, Deserializer, Visitor},
@@ -17,6 +18,17 @@ pub enum Scalar {
     Real(f64),
     /// Raw string value
     String(String),
+}
+
+impl fmt::Display for Scalar {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Boolean(b) => write!(f, "{}", b),
+            Self::Integer(i) => write!(f, "{}", i),
+            Self::Real(r) => write!(f, "{}", r),
+            Self::String(s) => write!(f, "\"{}\"", s),
+        }
+    }
 }
 
 impl From<bool> for Scalar {

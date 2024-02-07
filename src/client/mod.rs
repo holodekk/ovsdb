@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use serde::de::DeserializeOwned;
 use tokio::{
     net::UnixStream,
     sync::{mpsc, oneshot},
@@ -30,6 +31,8 @@ pub enum Error {
     InternalSync(#[from] mpsc::error::SendError<ClientCommand>),
     #[error("Shutdown error")]
     Shutdown(#[from] tokio::task::JoinError),
+    #[error("Tokio receive")]
+    TokioReceive(#[from] tokio::sync::oneshot::error::RecvError),
     #[error("Protocol error")]
     Codec(#[from] protocol::codec::Error),
 }
@@ -41,11 +44,13 @@ pub trait Entity {
 pub enum ClientRequest {
     Single {
         tx: oneshot::Sender<protocol::Response>,
-        request: protocol::Request,
+        method: protocol::Method,
+        params: protocol::Params,
     },
     Monitor {
         tx: mpsc::Sender<protocol::Response>,
-        request: protocol::Request,
+        method: protocol::Method,
+        params: protocol::Params,
     },
 }
 
@@ -103,51 +108,51 @@ impl Client {
         self.handle.await?
     }
 
-    pub async fn execute(
+    pub async fn execute<T>(
         &self,
         method: protocol::Method,
-        params: Option<Vec<protocol::Value>>,
-    ) -> Result<oneshot::Receiver<protocol::Response>, Error> {
+        params: protocol::Params,
+    ) -> Result<T, Error>
+    where
+        T: DeserializeOwned,
+    {
+        println!("Params: {}", params);
         let (tx, rx) = oneshot::channel();
-        let request = protocol::Request::new(method, params);
 
-        if let Some(s) = &self.request_sender {
-            s.send(ClientRequest::Single { tx, request }).await?;
-        }
-
-        Ok(rx)
-    }
-
-    pub async fn echo(&self, params: protocol::EchoParams) -> Result<Vec<String>, Error> {
-        match self.execute(protocol::Method::Echo, Some(params.0)).await {
-            Ok(rx) => match rx.await {
-                Ok(res) => {
-                    let p: Vec<String> = serde_json::from_value(res.result)?;
-                    Ok(p)
-                }
-                Err(_err) => Err(Error::Unknown),
-            },
-            Err(err) => Err(err),
+        match &self.request_sender {
+            Some(s) => {
+                s.send(ClientRequest::Single { tx, method, params }).await?;
+                let res = rx.await?;
+                let val: T = serde_json::from_value(res.result)?;
+                Ok(val)
+            }
+            None => Err(Error::Unknown),
         }
     }
 
-    pub async fn get_schema(&self, database: &str) -> Result<crate::schema::Schema, Error> {
-        match self
-            .execute(
-                protocol::Method::GetSchema,
-                Some(vec![protocol::Value::from(database)]),
-            )
+    pub async fn echo<P, I>(&self, params: P) -> Result<Vec<String>, Error>
+    where
+        P: IntoIterator<Item = I>,
+        I: Into<protocol::Value>,
+    {
+        self.execute(protocol::Method::Echo, protocol::Params::new(params))
             .await
-        {
-            Ok(rx) => match rx.await {
-                Ok(res) => {
-                    let s: crate::schema::Schema = serde_json::from_value(res.result)?;
-                    Ok(s)
-                }
-                Err(_err) => Err(Error::Unknown),
-            },
-            Err(err) => Err(err),
-        }
+    }
+
+    pub async fn list_databases(&self) -> Result<Vec<String>, Error> {
+        self.execute(protocol::Method::ListDatabases, protocol::Params::default())
+            .await
+    }
+
+    pub async fn get_schema<S>(&self, database: S) -> Result<crate::schema::Schema, Error>
+    where
+        S: Into<protocol::Value>,
+    {
+        self.execute(
+            protocol::Method::GetSchema,
+            protocol::Params::new(vec![database]),
+        )
+        .await
     }
 }
 
@@ -168,11 +173,13 @@ where
         tokio::select! {
             Some(msg) = requests.recv() => {
                 match msg {
-                    ClientRequest::Single { tx, request } => {
+                    ClientRequest::Single { tx, method, params } => {
+                        let request = protocol::Request::new(method, params);
                         oneshot_channels.insert(request.id, tx);
                         conn.send(request).await?;
                     },
-                    ClientRequest::Monitor { tx, request } => {
+                    ClientRequest::Monitor { tx, method, params } => {
+                        let request = protocol::Request::new(method, params);
                         monitor_channels.insert(request.id, tx);
                         conn.send(request).await?;
                     }

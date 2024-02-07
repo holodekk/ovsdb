@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::convert::From;
+use std::fmt;
 use std::ops::Deref;
 
 use serde::{
@@ -12,6 +14,33 @@ use super::Scalar;
 /// Represents a `map` within ovsdb.
 #[derive(Debug, PartialEq)]
 pub struct Map(pub BTreeMap<String, Scalar>);
+
+impl fmt::Display for Map {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{")?;
+        for (idx, (key, value)) in self.0.iter().enumerate() {
+            if idx > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}: {}", key, value)?;
+        }
+        write!(f, "}}")
+    }
+}
+
+impl<K, V> From<BTreeMap<K, V>> for Map
+where
+    K: ToString + Ord,
+    V: Into<Scalar>,
+{
+    fn from(value: BTreeMap<K, V>) -> Self {
+        let mut map: BTreeMap<String, Scalar> = BTreeMap::new();
+        for (k, v) in value {
+            map.insert(k.to_string(), v.into());
+        }
+        Self(map)
+    }
+}
 
 impl Deref for Map {
     type Target = BTreeMap<String, Scalar>;

@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 
 use futures::stream::StreamExt;
-use serde_json::Value;
 use tokio::{
     io::AsyncWriteExt,
     net::{TcpStream, UnixStream},
@@ -12,7 +11,7 @@ use crate::protocol::{codec, Request};
 
 #[async_trait]
 pub trait Connection {
-    async fn next(&mut self) -> Option<Result<Value, codec::Error>>;
+    async fn next(&mut self) -> Option<Result<serde_json::Value, codec::Error>>;
     async fn send(&mut self, request: Request) -> Result<(), std::io::Error>;
     async fn shutdown(&mut self) -> Result<(), std::io::Error>;
 }
@@ -32,7 +31,7 @@ impl TcpConnection {
 
 #[async_trait]
 impl Connection for TcpConnection {
-    async fn next(&mut self) -> Option<Result<Value, codec::Error>> {
+    async fn next(&mut self) -> Option<Result<serde_json::Value, codec::Error>> {
         self.reader.next().await
     }
 
@@ -61,12 +60,13 @@ impl UnixConnection {
 
 #[async_trait]
 impl Connection for UnixConnection {
-    async fn next(&mut self) -> Option<Result<Value, codec::Error>> {
+    async fn next(&mut self) -> Option<Result<serde_json::Value, codec::Error>> {
         self.reader.next().await
     }
 
     async fn send(&mut self, request: Request) -> Result<(), std::io::Error> {
         let data = serde_json::to_vec(&request)?;
+        println!("Sending {}", String::from_utf8(data.clone()).unwrap());
         self.writer.write_all(&data).await
     }
 

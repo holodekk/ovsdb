@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{
     de::{self, Deserializer, MapAccess, SeqAccess, Visitor},
     ser::{SerializeSeq, Serializer},
@@ -29,6 +31,16 @@ pub enum Atom {
     Map(Map),
     Set(Set),
     Uuid(Uuid),
+}
+
+impl fmt::Display for Atom {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Map(m) => write!(f, "{}", m),
+            Self::Set(s) => write!(f, "{}", s),
+            Self::Uuid(u) => write!(f, "{}", u),
+        }
+    }
 }
 
 impl Serialize for Atom {

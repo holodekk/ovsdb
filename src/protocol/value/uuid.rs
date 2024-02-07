@@ -1,4 +1,5 @@
 use std::convert::{AsRef, TryFrom};
+use std::fmt;
 use std::ops::Deref;
 
 use ::uuid::Uuid as _Uuid;
@@ -19,12 +20,22 @@ impl Uuid {
     }
 }
 
-impl ToString for Uuid {
-    fn to_string(&self) -> String {
-        self.0
-            .as_hyphenated()
-            .encode_lower(&mut _Uuid::encode_buffer())
-            .to_string()
+impl fmt::Display for Uuid {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.0
+                .as_hyphenated()
+                .encode_lower(&mut _Uuid::encode_buffer())
+                .to_string()
+        )
+    }
+}
+
+impl From<_Uuid> for Uuid {
+    fn from(value: _Uuid) -> Self {
+        Self(value)
     }
 }
 

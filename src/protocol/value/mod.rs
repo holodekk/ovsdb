@@ -1,4 +1,5 @@
 use std::convert::From;
+use std::fmt;
 
 use serde::{
     de::{self, Deserializer, MapAccess, SeqAccess, Visitor},
@@ -23,9 +24,48 @@ pub enum Value {
     Atom(Atom),
 }
 
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Scalar(s) => write!(f, "{}", s),
+            Self::Atom(a) => write!(f, "{}", a),
+        }
+    }
+}
+
+impl From<bool> for Value {
+    fn from(value: bool) -> Value {
+        Value::Scalar(Scalar::Boolean(value))
+    }
+}
+
+impl From<i64> for Value {
+    fn from(value: i64) -> Value {
+        Value::Scalar(Scalar::Integer(value))
+    }
+}
+
+impl From<f64> for Value {
+    fn from(value: f64) -> Value {
+        Value::Scalar(Scalar::Real(value))
+    }
+}
+
 impl From<&str> for Value {
     fn from(value: &str) -> Value {
-        Value::Scalar(Scalar::from(value))
+        Self::Scalar(Scalar::String(value.into()))
+    }
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Value {
+        Self::Scalar(Scalar::String(value))
+    }
+}
+
+impl From<Uuid> for Value {
+    fn from(value: Uuid) -> Value {
+        Self::Atom(Atom::Uuid(value))
     }
 }
 
