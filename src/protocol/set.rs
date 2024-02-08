@@ -8,7 +8,7 @@ use serde::{
 };
 
 #[derive(Debug)]
-pub struct Set<T>(Vec<T>)
+pub struct Set<T>(pub Vec<T>)
 where
     T: Serialize;
 
@@ -78,20 +78,13 @@ where
             where
                 S: SeqAccess<'de>,
             {
-                println!("visit_seq!");
                 let kind: String = value.next_element()?.unwrap();
-                // match value.next_element::<String>()? {
                 match kind.as_str() {
-                    // Some(kind) => match kind.as_str() {
                     "set" => {
                         let set: Vec<T> = value.next_element()?.unwrap();
                         Ok(Set(set))
                     }
                     _ => Err(de::Error::invalid_value(de::Unexpected::Str(&kind), &"set")),
-                    // },
-                    // None => Err(de::Error::custom(
-                    //     "`set` specified, but values not provided",
-                    // )),
                 }
             }
         }

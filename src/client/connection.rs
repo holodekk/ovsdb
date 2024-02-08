@@ -65,8 +65,8 @@ impl Connection for UnixConnection {
     }
 
     async fn send(&mut self, request: Request) -> Result<(), std::io::Error> {
+        println!("Sending:  {:#?}", request);
         let data = serde_json::to_vec(&request)?;
-        println!("Sending {}", String::from_utf8(data.clone()).unwrap());
         self.writer.write_all(&data).await
     }
 

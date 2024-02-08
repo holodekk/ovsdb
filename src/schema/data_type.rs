@@ -150,8 +150,6 @@ impl ToTokens for DataType {
                 });
             }
             DataType::Map { key, value } => {
-                // let key_type = key.to_token_stream();
-                // let value_type = value.to_token_stream();
                 tokens.extend(quote! {
                     protocol::Map<#key, #value>
                 });

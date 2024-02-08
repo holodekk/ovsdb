@@ -4,11 +4,12 @@ use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 
+#[derive(Debug)]
 pub struct FieldEnum {
-    name: syn::Ident,
-    attributes: Vec<syn::Attribute>,
-    values: Vec<syn::Ident>,
-    default: Option<String>,
+    pub name: syn::Ident,
+    pub attributes: Vec<syn::Attribute>,
+    pub values: Vec<syn::Ident>,
+    pub default: Option<String>,
 }
 
 impl FieldEnum {

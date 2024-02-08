@@ -1,11 +1,24 @@
 use serde::{
     de::{self, DeserializeOwned, Deserializer},
-    Deserialize,
+    ser::Serializer,
+    Deserialize, Serialize,
 };
 
 use super::Set;
 
-pub fn deserialize_enum<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub fn serialize<T, S>(v: &T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: Default + Serialize + PartialEq,
+    S: Serializer,
+{
+    if v == &T::default() {
+        Set::<i32>(vec![]).serialize(serializer)
+    } else {
+        v.serialize(serializer)
+    }
+}
+
+pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
     T: Default + DeserializeOwned,

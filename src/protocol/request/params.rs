@@ -13,6 +13,7 @@ pub enum Operation {
     },
 }
 
+#[derive(Debug)]
 pub enum Params {
     Echo(Vec<String>),
     ListDatabases,

@@ -56,19 +56,6 @@ impl ToTokens for Field {
             #(#attrs)*
             #field_ident: #field_kind
         });
-        // tokens.extend(quote! {
-        //     // #field_ident: #field_kind
-        //     #[doc = #msg]
-        //     #(#attrs)*
-        //     #field_ident: protocol::Map<String, String>
-        // });
-        // let msg = format!("{}: {:#?}", &self.name, &self.kind);
-        // tokens.extend(quote! {
-        //     // #field_ident: #field_kind
-        //     #[doc = #msg]
-        //     #(#attrs)*
-        //     #field_ident: String
-        // });
     }
 }
 
@@ -109,12 +96,12 @@ mod tests {
     #[test]
     fn test_field() {
         let expected = r#"struct Test {
-    #[serde(deserialize_with = "deserialize_enum")]
+    #[serde(with = "protocol::enumeration")]
     color: Color,
 }
 "#;
         let field_builder = Field::build("color");
-        field_builder.attribute(r#"#[serde(deserialize_with = "deserialize_enum")]"#);
+        field_builder.attribute(r#"#[serde(with = "protocol::enumeration")]"#);
         field_builder.kind(quote! { Color });
         let field = field_builder.build();
         let mut buffer = Vec::new();

@@ -216,7 +216,6 @@ where
             Some(data) = conn.next() => {
                 println!("Received: {:#?}", data);
                 let res: protocol::Response = serde_json::from_value(data?)?;
-                println!("result: {}", res.result);
                 if let Some(tx) = oneshot_channels.remove(&res.id) {
                     let _ = tx.send(res);
                 } else if let Some(tx) = monitor_channels.get(&res.id) {

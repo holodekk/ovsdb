@@ -5,6 +5,7 @@ pub use method::*;
 mod params;
 pub use params::*;
 
+#[derive(Debug)]
 pub struct Request {
     pub id: uuid::Uuid,
     pub method: Method,
