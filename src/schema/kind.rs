@@ -42,7 +42,7 @@ pub struct Constraints<T, O> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum DataType {
+pub enum Kind {
     Boolean,
     Integer(Constraints<i64, i64>),
     Real(Constraints<f64, f64>),
@@ -52,13 +52,13 @@ pub enum DataType {
         ref_type: Option<RefType>,
     },
     Map {
-        key: Box<DataType>,
-        value: Box<DataType>,
+        key: Box<Kind>,
+        value: Box<Kind>,
     },
     Unknown,
 }
 
-impl DataType {
+impl Kind {
     pub fn is_enum(&self) -> bool {
         match self {
             Self::Integer(c) => c.options.is_some(),
@@ -129,27 +129,27 @@ impl DataType {
     }
 }
 
-impl ToTokens for DataType {
+impl ToTokens for Kind {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
-            DataType::Boolean => {
+            Self::Boolean => {
                 tokens.append(format_ident!("{}", "bool"));
             }
-            DataType::Integer(_) => {
+            Self::Integer(_) => {
                 tokens.append(format_ident!("{}", "i64"));
             }
-            DataType::Real(_) => {
+            Self::Real(_) => {
                 tokens.append(format_ident!("{}", "f64"));
             }
-            DataType::String(_) => {
+            Self::String(_) => {
                 tokens.append(format_ident!("{}", "String"));
             }
-            DataType::Uuid { .. } => {
+            Self::Uuid { .. } => {
                 tokens.extend(quote! {
                     protocol::Uuid
                 });
             }
-            DataType::Map { key, value } => {
+            Self::Map { key, value } => {
                 tokens.extend(quote! {
                     protocol::Map<#key, #value>
                 });

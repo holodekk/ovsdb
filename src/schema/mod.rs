@@ -7,8 +7,8 @@ use serde_json::Value;
 
 mod column;
 pub use column::Column;
-mod data_type;
-pub use data_type::{Constraints, DataType, RefType};
+mod kind;
+pub use kind::{Constraints, Kind, RefType};
 mod table;
 pub use table::Table;
 

@@ -75,7 +75,7 @@ pub fn generate_model(table: &Table) -> Result<Model> {
             field_builder.kind(quote! { #kind });
         }
 
-        if let crate::schema::DataType::String(c) = &column.kind {
+        if let crate::schema::Kind::String(c) = &column.kind {
             if let Some(options) = &c.options {
                 let enumeration = generate_enum(table, column, options)?;
                 let e = &enumeration.name;

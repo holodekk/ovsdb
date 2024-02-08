@@ -1,12 +1,12 @@
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-use super::DataType;
+use super::Kind;
 
 #[derive(Clone, Debug)]
 pub struct Column {
     pub name: String,
-    pub kind: DataType,
+    pub kind: Kind,
     pub min: Option<i64>,
     pub max: Option<i64>,
     pub ephemeral: Option<bool>,
@@ -19,8 +19,8 @@ impl Column {
     }
     pub fn is_set(&self) -> bool {
         match &self.kind {
-            DataType::Map { .. } => false,
-            DataType::Uuid { ref_table, .. } => match self.min {
+            Kind::Map { .. } => false,
+            Kind::Uuid { ref_table, .. } => match self.min {
                 Some(0) => ref_table.is_some(),
                 _ => false,
             },
@@ -67,7 +67,7 @@ impl<'de> Deserialize<'de> for Column {
             .get("mutable")
             .map(|m| m.as_bool().expect("convert `mutable` to `bool`"));
 
-        let kind = DataType::from_value(&data).unwrap();
+        let kind = Kind::from_value(&data).unwrap();
 
         if obj.get("type").unwrap().is_object() {
             let typ = obj.get("type").unwrap().as_object().unwrap();
@@ -104,21 +104,21 @@ mod tests {
     fn handles_boolean() {
         let data = r#"{ "type": "boolean" }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert_eq!(c.kind, DataType::Boolean);
+        assert_eq!(c.kind, Kind::Boolean);
     }
 
     #[test]
     fn handles_scalar_integer() {
         let data = r#"{ "type": "integer" }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::Integer(_)));
+        assert!(matches!(c.kind, Kind::Integer(_)));
     }
 
     #[test]
     fn handles_complex_integer() {
         let data = r#"{ "type": { "key": "integer" } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::Integer(_)));
+        assert!(matches!(c.kind, Kind::Integer(_)));
     }
 
     #[test]
@@ -126,8 +126,8 @@ mod tests {
         let data =
             r#"{ "type": { "key": { "type": "integer", "minInteger": 0, "maxInteger": 100 } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::Integer(_)));
-        if let DataType::Integer(constraints) = c.kind {
+        assert!(matches!(c.kind, Kind::Integer(_)));
+        if let Kind::Integer(constraints) = c.kind {
             assert_eq!(constraints.min, Some(0));
             assert_eq!(constraints.max, Some(100));
             assert_eq!(constraints.options, None);
@@ -140,8 +140,8 @@ mod tests {
     fn handles_integer_enum() {
         let data = r#"{ "type": { "key": { "type": "integer", "enum": ["set", [0, 1, 2]] } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::Integer(_)));
-        if let DataType::Integer(constraints) = c.kind {
+        assert!(matches!(c.kind, Kind::Integer(_)));
+        if let Kind::Integer(constraints) = c.kind {
             assert_eq!(constraints.min, None);
             assert_eq!(constraints.max, None);
             assert_eq!(constraints.options, Some(vec![0, 1, 2]));
@@ -154,21 +154,21 @@ mod tests {
     fn handles_scalar_real() {
         let data = r#"{ "type": "real" }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::Real(_)));
+        assert!(matches!(c.kind, Kind::Real(_)));
     }
 
     #[test]
     fn handles_complex_real() {
         let data = r#"{ "type": { "key": "real" } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::Real(_)));
+        assert!(matches!(c.kind, Kind::Real(_)));
     }
 
     #[test]
     fn handles_complex_real_with_constraints() {
         let data = r#"{ "type": { "key": { "type": "real", "minReal": 1.1, "maxReal": 2.2 } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        if let DataType::Real(constraints) = c.kind {
+        if let Kind::Real(constraints) = c.kind {
             assert_eq!(constraints.min, Some(1.1));
             assert_eq!(constraints.max, Some(2.2));
             assert_eq!(constraints.options, None);
@@ -181,7 +181,7 @@ mod tests {
     fn handles_real_enum() {
         let data = r#"{ "type": { "key": { "type": "real", "enum": ["set", [1.1, 2.2, 3.3]] } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        if let DataType::Real(constraints) = c.kind {
+        if let Kind::Real(constraints) = c.kind {
             assert_eq!(constraints.min, None);
             assert_eq!(constraints.max, None);
             assert_eq!(constraints.options, Some(vec![1.1, 2.2, 3.3]));
@@ -194,14 +194,14 @@ mod tests {
     fn handles_scalar_string() {
         let data = r#"{ "type": "string" }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::String(_)));
+        assert!(matches!(c.kind, Kind::String(_)));
     }
 
     #[test]
     fn handles_complex_string() {
         let data = r#"{ "type": { "key": "string" } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::String(_)));
+        assert!(matches!(c.kind, Kind::String(_)));
     }
 
     #[test]
@@ -209,8 +209,8 @@ mod tests {
         let data =
             r#"{ "type": { "key": { "type": "string", "minLength": 0, "maxLength": 32 } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::String(_)));
-        if let DataType::String(constraints) = c.kind {
+        assert!(matches!(c.kind, Kind::String(_)));
+        if let Kind::String(constraints) = c.kind {
             assert_eq!(constraints.min, Some(0));
             assert_eq!(constraints.max, Some(32));
             assert_eq!(constraints.options, None);
@@ -223,8 +223,8 @@ mod tests {
     fn handles_string_enum() {
         let data = r#"{ "type": { "key": { "type": "string", "enum": ["set", ["One", "Two", "Three"]] } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::String(_)));
-        if let DataType::String(constraints) = c.kind {
+        assert!(matches!(c.kind, Kind::String(_)));
+        if let Kind::String(constraints) = c.kind {
             assert_eq!(constraints.min, None);
             assert_eq!(constraints.max, None);
             assert_eq!(
@@ -244,14 +244,14 @@ mod tests {
     fn handles_scalar_uuid() {
         let data = r#"{ "type": "uuid" }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, DataType::Uuid { .. }));
+        assert!(matches!(c.kind, Kind::Uuid { .. }));
     }
 
     #[test]
     fn handles_complex_uuid() {
         let data = r#"{ "type": { "key": { "type": "uuid", "refTable": "other_table", "refType": "weak" } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        if let DataType::Uuid {
+        if let Kind::Uuid {
             ref_table,
             ref_type,
         } = c.kind
@@ -267,9 +267,9 @@ mod tests {
     fn handles_simple_map() {
         let data = r#"{ "type": { "key": "string", "value": "string" } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        if let DataType::Map { key, value } = c.kind {
-            assert!(matches!(*key, DataType::String(_)));
-            assert!(matches!(*value, DataType::String(_)));
+        if let Kind::Map { key, value } = c.kind {
+            assert!(matches!(*key, Kind::String(_)));
+            assert!(matches!(*value, Kind::String(_)));
         } else {
             panic!();
         }
@@ -279,8 +279,8 @@ mod tests {
     fn handles_complex_map() {
         let data = r#"{ "type": { "key": { "type": "string", "enum": ["set", ["width", "height"]] }, "value": { "type": "string", "minLength": 5, "maxLength": 20 } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        if let DataType::Map { key, value } = c.kind {
-            if let DataType::String(constraints) = *key {
+        if let Kind::Map { key, value } = c.kind {
+            if let Kind::String(constraints) = *key {
                 assert_eq!(
                     constraints.options,
                     Some(vec!["width".to_string(), "height".to_string(),])
@@ -288,7 +288,7 @@ mod tests {
             } else {
                 panic!();
             }
-            if let DataType::String(constraints) = *value {
+            if let Kind::String(constraints) = *value {
                 assert_eq!(constraints.min, Some(5));
                 assert_eq!(constraints.max, Some(20));
                 assert_eq!(constraints.options, None);
