@@ -37,7 +37,16 @@ where
     {
         let mut seq = serializer.serialize_seq(Some(2))?;
         seq.serialize_element("map")?;
-        seq.serialize_element(&self.0)?;
+        let mut map: Vec<(&K, &V)> = vec![];
+        for (k, v) in &self.0 {
+            map.push((k, v));
+            // let mut pair = serializer.serialize_seq(Some(2))?;
+            // pair.serialize_element(&k)?;
+            // pair.serialize_element(&v)?;
+            // pair.end()?;
+            // map.serialize_element(&pair)?;
+        }
+        seq.serialize_element(&map)?;
         seq.end()
     }
 }
@@ -86,13 +95,17 @@ where
             where
                 S: SeqAccess<'de>,
             {
-                match value.next_element()? {
-                    Some(kind) => match kind {
+                match value.next_element::<String>()? {
+                    Some(kind) => match kind.as_str() {
                         "map" => {
-                            let map: BTreeMap<K, V> = value.next_element()?.unwrap();
+                            let values: Vec<(K, V)> = value.next_element()?.unwrap();
+                            let mut map: BTreeMap<K, V> = BTreeMap::new();
+                            for (k, v) in values {
+                                map.insert(k, v);
+                            }
                             Ok(Map(map))
                         }
-                        _ => Err(de::Error::invalid_value(de::Unexpected::Str(kind), &"map")),
+                        _ => Err(de::Error::invalid_value(de::Unexpected::Str(&kind), &"map")),
                     },
                     None => Err(de::Error::custom(
                         "`map` specified, but values not provided",
@@ -111,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_serialize() -> Result<(), serde_json::Error> {
-        let expected = r#"["map",{"color":"blue"}]"#;
+        let expected = r#"["map",[["color","blue"]]]"#;
         let mut map: BTreeMap<String, String> = BTreeMap::new();
         map.insert("color".to_string(), "blue".to_string());
         let value = Map(map);
@@ -122,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_deserialize() -> Result<(), serde_json::Error> {
-        let data = r#"["map",{"color":"blue"}]"#;
+        let data = r#"["map",[["color","blue"]]]"#;
         let map: Map<String, String> = serde_json::from_str(&data)?;
         assert_eq!(map.get("color").unwrap(), "blue");
         Ok(())

@@ -1,6 +1,3 @@
-use convert_case::{Case, Casing};
-use proc_macro2::TokenStream;
-use quote::{format_ident, quote, ToTokens};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
@@ -16,75 +13,6 @@ pub struct Table {
     pub max_rows: Option<i64>,
     #[serde(deserialize_with = "deserialize_columns")]
     pub columns: Vec<Column>,
-}
-
-impl ToTokens for Table {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let def = TableDef(self).to_token_stream();
-        let imp = TableImpl(self).to_token_stream();
-
-        tokens.extend(quote! {
-            use serde::{Deserialize, Serialize};
-
-            use ovsdb::{protocol, Entity};
-
-            #def
-            #imp
-        });
-    }
-}
-
-struct TableDef<'a>(pub &'a Table);
-
-impl<'a> ToTokens for TableDef<'a> {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let column_tokens: Vec<TokenStream> =
-            self.0.columns.iter().map(|c| c.to_token_stream()).collect();
-        let table_name = format_ident!("{}", self.0.name.to_case(Case::UpperCamel));
-        let table_tokens = quote! {
-            #[derive(Debug, Deserialize, Serialize)]
-            pub struct #table_name {
-                #( #column_tokens),*
-            }
-        };
-        tokens.extend(table_tokens);
-    }
-}
-
-impl<'a> std::convert::TryFrom<TableDef<'a>> for syn::ItemStruct {
-    type Error = syn::Error;
-
-    fn try_from(def: TableDef<'a>) -> Result<Self, Self::Error> {
-        let tokens = def.to_token_stream();
-        let parsed: syn::ItemStruct = syn::parse2(tokens)?;
-        Ok(parsed)
-    }
-}
-
-struct TableImpl<'a>(pub &'a Table);
-
-impl<'a> ToTokens for TableImpl<'a> {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let table_ident = format_ident!("{}", self.0.name.to_case(Case::UpperCamel));
-        let table = self.0.name.to_string();
-        tokens.extend(quote! {
-            impl Entity for #table_ident {
-              fn table_name() -> &'static str {
-                #table
-              }
-            }
-        });
-    }
-}
-
-impl<'a> std::convert::TryFrom<TableImpl<'a>> for syn::ItemImpl {
-    type Error = syn::Error;
-
-    fn try_from(imp: TableImpl<'a>) -> Result<Self, Self::Error> {
-        let tokens = imp.to_token_stream();
-        let parsed: Self = syn::parse2(tokens)?;
-        Ok(parsed)
-    }
 }
 
 fn deserialize_columns<'de, D>(de: D) -> Result<Vec<Column>, D::Error>

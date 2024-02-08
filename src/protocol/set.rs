@@ -78,17 +78,20 @@ where
             where
                 S: SeqAccess<'de>,
             {
-                match value.next_element()? {
-                    Some(kind) => match kind {
-                        "set" => {
-                            let set: Vec<T> = value.next_element()?.unwrap();
-                            Ok(Set(set))
-                        }
-                        _ => Err(de::Error::invalid_value(de::Unexpected::Str(kind), &"set")),
-                    },
-                    None => Err(de::Error::custom(
-                        "`set` specified, but values not provided",
-                    )),
+                println!("visit_seq!");
+                let kind: String = value.next_element()?.unwrap();
+                // match value.next_element::<String>()? {
+                match kind.as_str() {
+                    // Some(kind) => match kind.as_str() {
+                    "set" => {
+                        let set: Vec<T> = value.next_element()?.unwrap();
+                        Ok(Set(set))
+                    }
+                    _ => Err(de::Error::invalid_value(de::Unexpected::Str(&kind), &"set")),
+                    // },
+                    // None => Err(de::Error::custom(
+                    //     "`set` specified, but values not provided",
+                    // )),
                 }
             }
         }
@@ -100,6 +103,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Deserialize)]
+    struct Foo {
+        bar: Set<String>,
+    }
 
     #[test]
     fn test_serialize() -> Result<(), serde_json::Error> {
@@ -113,10 +121,10 @@ mod tests {
 
     #[test]
     fn test_deserialize() -> Result<(), serde_json::Error> {
-        let data = r#"["set",["red","blue"]]"#;
-        let set: Set<String> = serde_json::from_str(&data)?;
-        assert_eq!(set.first().unwrap(), &"red".to_string());
-        assert_eq!(set.last().unwrap(), &"blue".to_string());
+        let data = r#"{"bar": ["set",["red","blue"]]}"#;
+        let foo: Foo = serde_json::from_str(&data)?;
+        assert_eq!(foo.bar.first().unwrap(), &"red".to_string());
+        assert_eq!(foo.bar.last().unwrap(), &"blue".to_string());
         Ok(())
     }
 }

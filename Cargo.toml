@@ -15,7 +15,7 @@ prettyplease = "0.2.16"
 serde = { version = "1.0.189", features = ["derive"] }
 serde_json = "1.0.107"
 serde_tuple = "0.5.0"
-syn = { version = "2", default-features = false, features = ["derive", "full", "parsing", "extra-traits"] }
+syn = { version = "2", default-features = false, features = ["derive", "full", "parsing", "printing", "extra-traits"] }
 thiserror = "1.0.50"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt",
 	"rt-multi-thread", "sync"] }

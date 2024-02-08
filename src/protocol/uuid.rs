@@ -48,14 +48,17 @@ impl<'de> Deserialize<'de> for Uuid {
             where
                 S: SeqAccess<'de>,
             {
-                match value.next_element()? {
-                    Some(kind) => match kind {
+                match value.next_element::<String>()? {
+                    Some(kind) => match kind.as_str() {
                         "uuid" => {
                             let s: String = value.next_element()?.unwrap();
                             let uuid = _Uuid::parse_str(&s).map_err(de::Error::custom)?;
                             Ok(Uuid(uuid))
                         }
-                        _ => Err(de::Error::invalid_value(de::Unexpected::Str(kind), &"uuid")),
+                        _ => Err(de::Error::invalid_value(
+                            de::Unexpected::Str(&kind),
+                            &"uuid",
+                        )),
                     },
                     None => Err(de::Error::custom(
                         "`uuid` specified, but value not provided",

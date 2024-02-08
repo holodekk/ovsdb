@@ -1,6 +1,3 @@
-use convert_case::{Case, Casing};
-use proc_macro2::TokenStream;
-use quote::{format_ident, quote, ToTokens};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
@@ -17,9 +14,16 @@ pub struct Column {
 }
 
 impl Column {
+    pub fn is_enum(&self) -> bool {
+        self.kind.is_enum()
+    }
     pub fn is_set(&self) -> bool {
-        match self.kind {
+        match &self.kind {
             DataType::Map { .. } => false,
+            DataType::Uuid { ref_table, .. } => match self.min {
+                Some(0) => ref_table.is_some(),
+                _ => false,
+            },
             _ => {
                 if self.min.is_some()
                     && self.max.is_some()
@@ -87,27 +91,6 @@ impl<'de> Deserialize<'de> for Column {
             ephemeral,
             mutable,
         })
-    }
-}
-
-impl ToTokens for Column {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let attr_name = match &self.name == "type" {
-            true => format_ident!("{}", "kind"),
-            _ => format_ident!("{}", &self.name.to_case(Case::Snake)),
-        };
-
-        let attr_type = match self.is_set() {
-            true => {
-                let kind = self.kind.to_token_stream();
-                quote! { protocol::Set<#kind> }
-            }
-            false => self.kind.to_token_stream(),
-        };
-
-        tokens.extend(quote! {
-            pub #attr_name: #attr_type
-        });
     }
 }
 
@@ -182,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn handles_complex_real_with_constrints() {
+    fn handles_complex_real_with_constraints() {
         let data = r#"{ "type": { "key": { "type": "real", "minReal": 1.1, "maxReal": 2.2 } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
         if let DataType::Real(constraints) = c.kind {

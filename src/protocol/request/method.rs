@@ -5,7 +5,7 @@ pub enum Method {
     Echo,
     ListDatabases,
     GetSchema,
-    // Transact,
+    Transact,
     // Cancel,
     // Monitor,
     // Update,
@@ -26,6 +26,7 @@ impl Serialize for Method {
             Self::Echo => "echo",
             Self::ListDatabases => "list_dbs",
             Self::GetSchema => "get_schema",
+            Self::Transact => "transact",
         };
         method.serialize(serializer)
     }
