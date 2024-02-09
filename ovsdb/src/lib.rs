@@ -22,3 +22,13 @@ pub enum Error {
     // #[error("Protocol error")]
     // Codec(#[from] protocol::codec::Error),
 }
+
+#[macro_export]
+macro_rules! include_schema {
+    ($schema: tt) => {
+        include!(concat!(
+            env!("OUT_DIR"),
+            concat!("/", $schema, "/", "mod.rs")
+        ));
+    };
+}

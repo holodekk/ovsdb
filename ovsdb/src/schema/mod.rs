@@ -42,7 +42,10 @@ where
 }
 
 impl Schema {
-    pub fn from_file(filename: &Path) -> Result<Self, std::io::Error> {
+    pub fn from_file<P>(filename: P) -> Result<Self, std::io::Error>
+    where
+        P: AsRef<Path>,
+    {
         let mut schema_file = File::open(filename)?;
         let mut schema_contents = String::new();
         schema_file.read_to_string(&mut schema_contents)?;
