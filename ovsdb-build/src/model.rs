@@ -7,6 +7,7 @@ use super::{Attribute, Field, FieldEnum};
 #[derive(Debug)]
 pub struct Model {
     name: syn::Ident,
+    table_name: String,
     attributes: Vec<Attribute>,
     fields: Vec<Field>,
 }
@@ -21,6 +22,7 @@ impl Default for Model {
     fn default() -> Self {
         Self {
             name: format_ident!("{}", "INVALID"),
+            table_name: "".to_string(),
             attributes: vec![],
             fields: vec![],
         }
@@ -29,7 +31,7 @@ impl Default for Model {
 
 impl ToTokens for Model {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let table_name = self.name.to_string();
+        let table_name = &self.table_name;
         let struct_ident = &self.name;
         let attrs = &self.attributes;
         let fields = &self.fields;
@@ -64,6 +66,7 @@ impl ModelBuilder {
     where
         S: AsRef<str>,
     {
+        self.target.table_name = name.as_ref().into();
         self.target.name = format_ident!("{}", name.as_ref().to_case(Case::UpperCamel));
         self
     }
@@ -112,7 +115,7 @@ pub struct Test {
 }
 impl Entity for Test {
     fn table_name() -> &'static str {
-        "Test"
+        "test"
     }
 }
 "#;

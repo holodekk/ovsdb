@@ -54,6 +54,10 @@ impl Codec {
                                 if self.tags.is_empty() {
                                     // We have a full object
                                     self.data.extend_from_slice(src);
+                                    println!(
+                                        "Received: {}",
+                                        String::from_utf8(self.data.clone()).unwrap()
+                                    );
                                     let msg: Message = serde_json::from_slice(&self.data.to_vec())?;
                                     self.data.clear();
                                     return Ok((Some(msg), offset));
@@ -99,6 +103,7 @@ impl Encoder<Message> for Codec {
         let data = serde_json::to_vec(&item)?;
         dst.reserve(data.len());
         dst.put_slice(&data);
+        println!("Sent: {}", String::from_utf8(dst.clone().to_vec()).unwrap());
         Ok(())
     }
 }
