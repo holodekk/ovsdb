@@ -1,13 +1,19 @@
-use std::cell::RefCell;
+use std::convert::From;
 
+use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
+
+use crate::schema::Column;
+
+use super::{Attribute, FieldEnum};
 
 #[derive(Debug)]
 pub struct Field {
     name: syn::Ident,
-    attributes: Vec<syn::Attribute>,
+    attributes: Vec<Attribute>,
     kind: TokenStream,
+    enumerations: Vec<FieldEnum>,
 }
 
 impl Field {
@@ -15,34 +21,46 @@ impl Field {
     where
         S: AsRef<str>,
     {
-        let mut attributes: Vec<syn::Attribute> = vec![];
+        let mut attributes: Vec<Attribute> = vec![];
         let sanitized = Self::sanitize(&name, &mut attributes);
         Self {
             name: format_ident!("{}", sanitized),
             attributes,
             kind: quote! { INVALID },
+            enumerations: vec![],
         }
     }
 
-    fn sanitize<S>(name: S, attrs: &mut Vec<syn::Attribute>) -> String
+    fn sanitize<S>(name: S, attrs: &mut Vec<Attribute>) -> String
     where
         S: AsRef<str>,
     {
         match name.as_ref() {
             "type" => {
-                let mut attr = super::generate_attribute("#[serde(rename = \"type\")]");
-                attrs.append(&mut attr);
+                attrs.push(Attribute::from("#[serde(rename = \"type\")]"));
                 "kind".to_string()
             }
             _ => name.as_ref().into(),
         }
     }
 
-    pub fn build<S>(name: S) -> FieldBuilder
+    pub fn set_kind(&mut self, kind: TokenStream) {
+        self.kind = kind;
+    }
+
+    pub fn add_attribute<S>(&mut self, attr: S)
     where
         S: AsRef<str>,
     {
-        FieldBuilder::new(Self::new(name))
+        self.attributes.push(Attribute::from(attr));
+    }
+
+    pub fn add_enumeration(&mut self, enumeration: FieldEnum) {
+        self.enumerations.push(enumeration);
+    }
+
+    pub fn enumerations(&self) -> &Vec<FieldEnum> {
+        &self.enumerations
     }
 }
 
@@ -59,31 +77,36 @@ impl ToTokens for Field {
     }
 }
 
-pub struct FieldBuilder {
-    target: RefCell<Field>,
-}
+impl From<&Column> for Field {
+    fn from(column: &Column) -> Self {
+        let k = &column.kind;
+        let kind = if column.is_set() {
+            quote! { protocol::Set<#k> }
+        } else {
+            quote! { #k }
+        };
+        let mut field = Self::new(&column.name);
+        field.set_kind(kind);
 
-impl FieldBuilder {
-    pub fn new(target: Field) -> Self {
-        Self {
-            target: RefCell::new(target),
+        if let crate::schema::Kind::String(c) = &column.kind {
+            if let Some(options) = &c.options {
+                let name = column.name.to_case(Case::UpperCamel);
+                let enumeration = FieldEnum::builder()
+                    .name(name)
+                    .attribute("#[derive(Debug, Deserialize, PartialEq, Serialize)]")
+                    .attribute("#[serde(rename_all = \"snake_case\")]")
+                    .values(options)
+                    .value("None")
+                    .default_value("None")
+                    .build();
+                let e = &enumeration.name();
+                field.set_kind(quote! { #e });
+                field.add_attribute("#[serde(with = \"protocol::enumeration\")]");
+                field.add_enumeration(enumeration);
+            }
         }
-    }
 
-    pub fn attribute<S>(&self, attr: S)
-    where
-        S: AsRef<str>,
-    {
-        let mut attrs = super::generate_attribute(attr);
-        self.target.borrow_mut().attributes.append(&mut attrs);
-    }
-
-    pub fn kind(&self, kind: TokenStream) {
-        self.target.borrow_mut().kind = kind;
-    }
-
-    pub fn build(self) -> Field {
-        self.target.into_inner()
+        field
     }
 }
 
@@ -100,10 +123,9 @@ mod tests {
     color: Color,
 }
 "#;
-        let field_builder = Field::build("color");
-        field_builder.attribute(r#"#[serde(with = "protocol::enumeration")]"#);
-        field_builder.kind(quote! { Color });
-        let field = field_builder.build();
+        let mut field = Field::new("color");
+        field.set_kind(quote! { Color });
+        field.add_attribute(r#"#[serde(with = "protocol::enumeration")]"#);
         let mut buffer = Vec::new();
         let parsed: syn::File = syn::parse2(quote! {
         struct Test {

@@ -4,32 +4,34 @@ use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 
+use super::Attribute;
+
 #[derive(Debug)]
 pub struct FieldEnum {
-    pub name: syn::Ident,
-    pub attributes: Vec<syn::Attribute>,
-    pub values: Vec<syn::Ident>,
-    pub default: Option<String>,
+    name: syn::Ident,
+    attributes: Vec<Attribute>,
+    values: Vec<syn::Ident>,
+    default: Option<String>,
 }
 
 impl FieldEnum {
-    pub fn new<S>(name: S) -> Self
-    where
-        S: AsRef<str>,
-    {
+    pub fn name(&self) -> &syn::Ident {
+        &self.name
+    }
+
+    pub fn builder() -> FieldEnumBuilder {
+        FieldEnumBuilder::new()
+    }
+}
+
+impl Default for FieldEnum {
+    fn default() -> Self {
         Self {
-            name: format_ident!("{}", name.as_ref().to_case(Case::UpperCamel)),
+            name: format_ident!("{}", "INVALID"),
             attributes: vec![],
             values: vec![],
             default: None,
         }
-    }
-
-    pub fn build<S>(name: S) -> FieldEnumBuilder
-    where
-        S: AsRef<str>,
-    {
-        FieldEnumBuilder::new(Self::new(name))
     }
 }
 
@@ -64,21 +66,31 @@ pub struct FieldEnumBuilder {
 }
 
 impl FieldEnumBuilder {
-    pub fn new(target: FieldEnum) -> Self {
-        Self {
-            target: RefCell::new(target),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn attribute<S>(&self, attr: S)
+    pub fn name<S>(self, name: S) -> Self
     where
         S: AsRef<str>,
     {
-        let mut attrs = super::generate_attribute(attr);
-        self.target.borrow_mut().attributes.append(&mut attrs);
+        self.target.borrow_mut().name =
+            format_ident!("{}", name.as_ref().to_case(Case::UpperCamel));
+        self
     }
 
-    pub fn value<S>(&self, value: S)
+    pub fn attribute<S>(self, attr: S) -> Self
+    where
+        S: AsRef<str>,
+    {
+        self.target
+            .borrow_mut()
+            .attributes
+            .push(Attribute::from(attr));
+        self
+    }
+
+    pub fn value<S>(self, value: S) -> Self
     where
         S: AsRef<str>,
     {
@@ -86,17 +98,41 @@ impl FieldEnumBuilder {
             "{}",
             value.as_ref().to_case(Case::UpperCamel)
         ));
+        self
     }
 
-    pub fn default<S>(&self, value: S)
+    pub fn values<T, S>(self, values: T) -> Self
+    where
+        T: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        for value in values {
+            self.target.borrow_mut().values.push(format_ident!(
+                "{}",
+                value.as_ref().to_case(Case::UpperCamel)
+            ));
+        }
+        self
+    }
+
+    pub fn default_value<S>(self, value: S) -> Self
     where
         S: Into<String>,
     {
         self.target.borrow_mut().default = Some(value.into());
+        self
     }
 
     pub fn build(self) -> FieldEnum {
         self.target.into_inner()
+    }
+}
+
+impl Default for FieldEnumBuilder {
+    fn default() -> Self {
+        Self {
+            target: RefCell::new(FieldEnum::default()),
+        }
     }
 }
 
@@ -121,16 +157,17 @@ impl Default for Test {
     }
 }
 "#;
-        let builder = FieldEnum::build("test");
-        builder.attribute("#[derive(Deserialize, Serialize)]");
-        builder.value("blue");
-        builder.value("red");
-        builder.value("green");
-        builder.value("none");
-        builder.default("None");
-        let model_enum = builder.build();
+        let value = FieldEnum::builder()
+            .name("test")
+            .attribute("#[derive(Deserialize, Serialize)]")
+            .value("blue")
+            .value("red")
+            .value("green")
+            .value("none")
+            .default_value("None")
+            .build();
         let mut buffer = Vec::new();
-        let parsed: syn::File = syn::parse2(quote! { #model_enum }).unwrap();
+        let parsed: syn::File = syn::parse2(quote! { #value }).unwrap();
         buffer
             .write_all(prettyplease::unparse(&parsed).as_bytes())
             .unwrap();

@@ -1,36 +1,29 @@
-use std::cell::RefCell;
-
 use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 
-use super::{Field, FieldEnum};
+use super::{Attribute, Field, FieldEnum};
 
+#[derive(Debug)]
 pub struct Model {
     name: syn::Ident,
-    attributes: Vec<syn::Attribute>,
+    attributes: Vec<Attribute>,
     fields: Vec<Field>,
-    enums: Vec<FieldEnum>,
 }
 
 impl Model {
-    pub fn new<S>(name: S) -> Self
-    where
-        S: AsRef<str>,
-    {
+    pub fn builder() -> ModelBuilder {
+        ModelBuilder::new()
+    }
+}
+
+impl Default for Model {
+    fn default() -> Self {
         Self {
-            name: format_ident!("{}", name.as_ref().to_case(Case::UpperCamel)),
+            name: format_ident!("{}", "INVALID"),
             attributes: vec![],
             fields: vec![],
-            enums: vec![],
         }
-    }
-
-    pub fn build<S>(name: S) -> ModelBuilder
-    where
-        S: AsRef<str>,
-    {
-        ModelBuilder::new(Self::new(name))
     }
 }
 
@@ -39,8 +32,9 @@ impl ToTokens for Model {
         let table_name = self.name.to_string();
         let struct_ident = &self.name;
         let attrs = &self.attributes;
-        let enums = &self.enums;
         let fields = &self.fields;
+        let enums: Vec<&FieldEnum> = fields.iter().flat_map(|f| f.enumerations()).collect();
+
         tokens.extend(quote! {
             #(#enums)*
             #(#attrs)*
@@ -56,35 +50,39 @@ impl ToTokens for Model {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct ModelBuilder {
-    target: RefCell<Model>,
+    target: Model,
 }
 
 impl ModelBuilder {
-    pub fn new(target: Model) -> Self {
-        Self {
-            target: RefCell::new(target),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn attribute<S>(&self, attr: S)
+    pub fn name<S>(mut self, name: S) -> Self
     where
         S: AsRef<str>,
     {
-        let mut attrs = super::generate_attribute(attr);
-        self.target.borrow_mut().attributes.append(&mut attrs);
+        self.target.name = format_ident!("{}", name.as_ref().to_case(Case::UpperCamel));
+        self
     }
 
-    pub fn field(&self, field: Field) {
-        self.target.borrow_mut().fields.push(field);
+    pub fn attribute<S>(mut self, attr: S) -> Self
+    where
+        S: AsRef<str>,
+    {
+        self.target.attributes.push(Attribute::from(attr));
+        self
     }
 
-    pub fn enumeration(&self, enumeration: FieldEnum) {
-        self.target.borrow_mut().enums.push(enumeration);
+    pub fn fields(mut self, mut fields: Vec<Field>) -> Self {
+        self.target.fields.append(&mut fields);
+        self
     }
 
     pub fn build(self) -> Model {
-        self.target.into_inner()
+        self.target
     }
 }
 
@@ -118,23 +116,26 @@ impl client::Entity for Test {
     }
 }
 "#;
-        let enum_builder = FieldEnum::build("TestColor");
-        enum_builder.value("red");
-        enum_builder.value("blue");
-        enum_builder.value("green");
-        enum_builder.value("none");
-        enum_builder.default("none");
+        let field_enum = FieldEnum::builder()
+            .name("TestColor")
+            .value("red")
+            .value("blue")
+            .value("green")
+            .value("none")
+            .default_value("none")
+            .build();
 
-        let field_builder = Field::build("color");
-        field_builder.attribute("#[serde(deserialize_with = \"deserialize_enum\")]");
-        field_builder.kind(quote! { TestColor });
+        let mut field = Field::new("color");
+        field.set_kind(quote! { TestColor });
+        field.add_attribute("#[serde(deserialize_with = \"deserialize_enum\")]");
+        field.add_enumeration(field_enum);
 
-        let model_builder = Model::build("test");
-        model_builder.attribute("#[derive(Debug, Deserialize, Serialize)]");
-        model_builder.enumeration(enum_builder.build());
-        model_builder.field(field_builder.build());
+        let model = Model::builder()
+            .name("test")
+            .attribute("#[derive(Debug, Deserialize, Serialize)]")
+            .fields(vec![field])
+            .build();
 
-        let model = model_builder.build();
         let mut buffer = Vec::new();
         let parsed: syn::File = syn::parse2(quote! { #model }).unwrap();
         buffer
