@@ -1,8 +1,8 @@
 use std::fmt;
 
-use serde::{ser::SerializeSeq, Serialize, Serializer};
+use serde::{ser::SerializeSeq, Deserialize, Serialize, Serializer};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "op")]
 pub enum Operation {
     #[serde(rename = "select")]
@@ -13,15 +13,30 @@ pub enum Operation {
     },
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TransactParams {
+    database: String,
+    operations: Vec<Operation>,
+}
+
+impl TransactParams {
+    pub fn new<S>(database: S, operations: Vec<Operation>) -> Self
+    where
+        S: Into<String>,
+    {
+        Self {
+            database: database.into(),
+            operations,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Params {
     Echo(Vec<String>),
     ListDatabases,
     GetSchema(String),
-    Transact {
-        database: String,
-        operations: Vec<Operation>,
-    },
+    Transact(TransactParams),
 }
 
 impl Serialize for Params {
@@ -33,10 +48,10 @@ impl Serialize for Params {
             Self::Echo(p) => p.serialize(serializer),
             Self::ListDatabases => Vec::<String>::new().serialize(serializer),
             Self::GetSchema(s) => vec![s].serialize(serializer),
-            Self::Transact {
+            Self::Transact(TransactParams {
                 database,
                 operations,
-            } => {
+            }) => {
                 let mut seq = serializer.serialize_seq(Some(operations.len() + 1))?;
                 seq.serialize_element(database)?;
                 for op in operations {
@@ -65,10 +80,10 @@ impl fmt::Display for Params {
             Self::GetSchema(p) => {
                 write!(f, "{}", p)
             }
-            Self::Transact {
+            Self::Transact(TransactParams {
                 database,
                 operations,
-            } => {
+            }) => {
                 write!(f, "database => {}, ", database)?;
                 write!(f, "operations => [")?;
                 for (idx, op) in operations.iter().enumerate() {

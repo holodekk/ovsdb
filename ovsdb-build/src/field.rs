@@ -4,7 +4,7 @@ use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 
-use crate::schema::Column;
+use ovsdb::schema::{Column, Kind};
 
 use super::{Attribute, FieldEnum};
 
@@ -88,7 +88,7 @@ impl From<&Column> for Field {
         let mut field = Self::new(&column.name);
         field.set_kind(kind);
 
-        if let crate::schema::Kind::String(c) = &column.kind {
+        if let Kind::String(c) = &column.kind {
             if let Some(options) = &c.options {
                 let name = column.name.to_case(Case::UpperCamel);
                 let enumeration = FieldEnum::builder()

@@ -7,8 +7,14 @@ use serde::{
     Deserialize, Serialize,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Uuid(_Uuid);
+
+impl From<_Uuid> for Uuid {
+    fn from(value: _Uuid) -> Self {
+        Self(value)
+    }
+}
 
 impl Deref for Uuid {
     type Target = _Uuid;

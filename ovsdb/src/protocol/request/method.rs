@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use serde::{Serialize, Serializer};
 
 #[derive(Debug, PartialEq)]
@@ -29,5 +31,19 @@ impl Serialize for Method {
             Self::Transact => "transact",
         };
         method.serialize(serializer)
+    }
+}
+
+impl TryFrom<String> for Method {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "echo" => Ok(Self::Echo),
+            "list_dbs" => Ok(Self::ListDatabases),
+            "get_schema" => Ok(Self::GetSchema),
+            "transact" => Ok(Self::Transact),
+            _ => Err(format!("Invalid method: {}", value)),
+        }
     }
 }

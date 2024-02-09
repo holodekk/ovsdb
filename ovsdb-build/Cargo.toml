@@ -1,0 +1,15 @@
+[package]
+name = "ovsdb-build"
+version = "0.1.0"
+edition = "2021"
+repository = "https://git.dubzland.net/holodekk/ovsdb-rust.git"
+license-file = "LICENSE"
+
+[dependencies]
+ovsdb.workspace = true
+convert_case = "0.6.0"
+quote = "1.0"
+proc-macro2 = "1.0"
+prettyplease = "0.2.16"
+syn = { version = "2", default-features = false, features = ["derive", "full", "parsing", "printing", "extra-traits"] }
+thiserror = "1.0.50"

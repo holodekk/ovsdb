@@ -40,11 +40,6 @@ where
         let mut map: Vec<(&K, &V)> = vec![];
         for (k, v) in &self.0 {
             map.push((k, v));
-            // let mut pair = serializer.serialize_seq(Some(2))?;
-            // pair.serialize_element(&k)?;
-            // pair.serialize_element(&v)?;
-            // pair.end()?;
-            // map.serialize_element(&pair)?;
         }
         seq.serialize_element(&map)?;
         seq.end()

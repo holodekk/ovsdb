@@ -5,7 +5,7 @@ use std::path::Path;
 use convert_case::{Case, Casing};
 use quote::quote;
 
-use crate::schema::Schema;
+use ovsdb::schema::Schema;
 
 mod attribute;
 mod field;
@@ -44,7 +44,8 @@ pub fn generate_models(schema: &Schema, directory: &Path) -> Result<()> {
 
         let tokens = quote! {
             use serde::{Deserialize, Serialize};
-            use ovsdb::{protocol, client};
+            use ovsdb::protocol;
+            use ovsdb_client::Entity;
             #model
         };
 

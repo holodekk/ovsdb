@@ -41,7 +41,7 @@ impl ToTokens for Model {
             pub struct #struct_ident {
                 #(#fields),*
             }
-            impl client::Entity for #struct_ident {
+            impl Entity for #struct_ident {
                 fn table_name() -> &'static str {
                     #table_name
                 }
@@ -110,7 +110,7 @@ pub struct Test {
     #[serde(deserialize_with = "deserialize_enum")]
     color: TestColor,
 }
-impl client::Entity for Test {
+impl Entity for Test {
     fn table_name() -> &'static str {
         "Test"
     }

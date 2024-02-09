@@ -1,11 +1,11 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Response {
-    pub result: Value,
+    pub id: Option<super::Uuid>,
+    pub result: Option<Value>,
     pub error: Option<String>,
-    pub id: uuid::Uuid,
 }
 
 #[derive(Debug, Deserialize)]
