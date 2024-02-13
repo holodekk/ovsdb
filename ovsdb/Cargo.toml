@@ -1,13 +1,18 @@
 [package]
 name = "ovsdb"
-version = "0.1.0"
+description = """
+Rust implementation of the OVSDB schema and wire protocol.
+"""
+documentation = "https://docs.rs/ovsdb/0.0.1"
 edition = "2021"
-repository = "https://git.dubzland.net/holodekk/ovsdb-rust.git"
-license-file = "LICENSE"
+homepage = "https://git.dubzland.com/holodekk/ovsdb"
+authors = ["Josh Williams <jdubz@holodekk.io>"]
+categories = ["ovsdb", "sdn", "network-programming", "database-interfaces"]
+version = "0.0.1"
+repository = "https://git.dubzland.com/holodekk/ovsdb.git"
+license = "MIT"
 
 [dependencies]
-quote = "1.0"
-proc-macro2 = "1.0"
 serde = { version = "1.0.189", features = ["derive"] }
 serde_json = "1.0.107"
 thiserror = "1.0.50"
