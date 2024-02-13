@@ -1,5 +1,5 @@
 image:
-  name: docker.dubzland.com/holodekk/rust-docker-ci:1.76
+  name: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/holodekk/rust-docker-ci:1.76
 
 stages:
   - test
