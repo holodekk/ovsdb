@@ -1,7 +1,13 @@
-use proc_macro2::TokenStream;
-use quote::{format_ident, quote, ToTokens, TokenStreamExt};
-use serde::Deserialize;
-use serde_json::Value;
+use std::str::FromStr;
+
+use serde::{
+    de::{self, Deserializer, MapAccess, Visitor},
+    Deserialize,
+};
+
+use crate::protocol::Set;
+
+use super::Atomic;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub enum RefType {
@@ -11,150 +17,320 @@ pub enum RefType {
     Weak,
 }
 
-fn extract_options<'a, T>(c: &'a Option<&'a Value>) -> Result<Option<Vec<T>>, serde_json::Error>
-where
-    T: Deserialize<'a>,
-{
-    if let Some(o) = c {
-        if o.is_array() {
-            let s = o.as_array().unwrap();
-            assert_eq!(s.len(), 2);
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BaseKind {
+    pub kind: Atomic,
+    pub choices: Option<Set<String>>,
+    pub min_integer: Option<i64>,
+    pub max_integer: Option<i64>,
+    pub min_real: Option<f64>,
+    pub max_real: Option<f64>,
+    pub min_length: Option<i64>,
+    pub max_length: Option<i64>,
+    pub ref_table: Option<String>,
+    pub ref_type: Option<RefType>,
+}
 
-            if s[0].as_str().unwrap() == "set" {
-                let values: Vec<T> = s[1]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|v| T::deserialize(v).unwrap())
-                    .collect();
-                return Ok(Some(values));
-            }
+impl BaseKind {
+    pub fn new(kind: Atomic) -> Self {
+        Self {
+            kind,
+            ..BaseKind::default()
         }
     }
-    Ok(None)
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Constraints<T, O> {
-    pub min: Option<T>,
-    pub max: Option<T>,
-    pub options: Option<Vec<O>>,
+impl<'de> Deserialize<'de> for BaseKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BaseKindVisitor;
+
+        impl<'de> Visitor<'de> for BaseKindVisitor {
+            type Value = BaseKind;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("`map` or `string`")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match Atomic::from_str(value) {
+                    Ok(a) => Ok(Self::Value::new(a)),
+                    Err(_) => Err(de::Error::invalid_value(
+                        de::Unexpected::Str(value),
+                        &"one of `boolean`, `integer`, `real`, `string`, `uuid`",
+                    )),
+                }
+            }
+
+            fn visit_map<S>(self, mut value: S) -> Result<Self::Value, S::Error>
+            where
+                S: MapAccess<'de>,
+            {
+                let mut base = BaseKind::default();
+
+                while let Some((k, v)) = value.next_entry::<String, serde_json::Value>()? {
+                    match k.as_str() {
+                        "type" => {
+                            base.kind = serde_json::from_value(v).map_err(de::Error::custom)?
+                        }
+                        "enum" => {
+                            base.choices =
+                                Some(serde_json::from_value(v).map_err(de::Error::custom)?)
+                        }
+                        "minInteger" => {
+                            base.min_integer =
+                                Some(serde_json::from_value(v).map_err(de::Error::custom)?)
+                        }
+                        "maxInteger" => {
+                            base.max_integer =
+                                Some(serde_json::from_value(v).map_err(de::Error::custom)?)
+                        }
+                        "minReal" => {
+                            base.min_real =
+                                Some(serde_json::from_value(v).map_err(de::Error::custom)?)
+                        }
+                        "maxReal" => {
+                            base.max_real =
+                                Some(serde_json::from_value(v).map_err(de::Error::custom)?)
+                        }
+                        "minLength" => {
+                            base.min_length =
+                                Some(serde_json::from_value(v).map_err(de::Error::custom)?)
+                        }
+                        "maxLength" => {
+                            base.max_length =
+                                Some(serde_json::from_value(v).map_err(de::Error::custom)?)
+                        }
+                        "refTable" => {
+                            base.ref_table =
+                                Some(serde_json::from_value(v).map_err(de::Error::custom)?)
+                        }
+                        "refType" => {
+                            base.ref_type =
+                                Some(serde_json::from_value(v).map_err(de::Error::custom)?)
+                        }
+                        _ => Err(de::Error::unknown_field(
+                            &k,
+                            &[
+                                "type",
+                                "enum",
+                                "minInteger",
+                                "maxInteger",
+                                "minReal",
+                                "maxReal",
+                                "minLength",
+                                "maxLength",
+                                "refTable",
+                                "refType",
+                            ],
+                        ))?,
+                    }
+                }
+
+                Ok(base)
+            }
+        }
+
+        deserializer.deserialize_any(BaseKindVisitor)
+    }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Kind {
-    Boolean,
-    Integer(Constraints<i64, i64>),
-    Real(Constraints<f64, f64>),
-    String(Constraints<i64, String>),
-    Uuid {
-        ref_table: Option<String>,
-        ref_type: Option<RefType>,
-    },
-    Map {
-        key: Box<Kind>,
-        value: Box<Kind>,
-    },
-    Unknown,
+#[derive(Clone, Debug)]
+pub struct Kind {
+    pub key: BaseKind,
+    pub value: Option<BaseKind>,
+    pub min: i64,
+    pub max: i64,
 }
 
 impl Kind {
-    pub fn is_enum(&self) -> bool {
-        match self {
-            Self::Integer(c) => c.options.is_some(),
-            Self::Real(c) => c.options.is_some(),
-            Self::String(c) => c.options.is_some(),
-            _ => false,
+    pub fn new(key: BaseKind) -> Self {
+        Self {
+            key,
+            ..Self::default()
         }
     }
 
-    pub fn from_value(data: &Value) -> Result<Self, serde_json::Error> {
-        let kind = match data {
-            Value::String(s) => match s.as_str() {
-                "boolean" => Self::Boolean,
-                "integer" => Self::Integer(Constraints::default()),
-                "real" => Self::Real(Constraints::default()),
-                "string" => Self::String(Constraints::default()),
-                "uuid" => Self::Uuid {
-                    ref_table: None,
-                    ref_type: None,
-                },
-                _ => Self::Unknown,
-            },
-            Value::Object(o) => {
-                let type_obj = o.get("type").unwrap();
-                match type_obj {
-                    Value::String(s) => match s.as_str() {
-                        "boolean" => Self::Boolean,
-                        "integer" => Self::Integer(Constraints {
-                            options: extract_options(&o.get("enum")).unwrap(),
-                            min: o.get("minInteger").map(|v| v.as_i64().unwrap()),
-                            max: o.get("maxInteger").map(|v| v.as_i64().unwrap()),
-                        }),
-                        "real" => Self::Real(Constraints {
-                            options: extract_options(&o.get("enum")).unwrap(),
-                            min: o.get("minReal").map(|v| v.as_f64().unwrap()),
-                            max: o.get("maxReal").map(|v| v.as_f64().unwrap()),
-                        }),
-                        "string" => Self::String(Constraints {
-                            options: extract_options(&o.get("enum")).unwrap(),
-                            min: o.get("minLength").map(|v| v.as_i64().unwrap()),
-                            max: o.get("maxLength").map(|v| v.as_i64().unwrap()),
-                        }),
-                        "uuid" => Self::Uuid {
-                            ref_table: o.get("refTable").map(|v| v.as_str().unwrap().to_string()),
-                            ref_type: o.get("refType").map(|t| RefType::deserialize(t).unwrap()),
-                        },
-                        _ => Self::Unknown,
-                    },
-                    Value::Object(typ) => {
-                        let key = Self::from_value(typ.get("key").unwrap()).unwrap();
-                        if typ.contains_key("value") {
-                            let value = Self::from_value(typ.get("value").unwrap()).unwrap();
-                            Self::Map {
-                                key: Box::new(key),
-                                value: Box::new(value),
-                            }
-                        } else {
-                            key
-                        }
-                    }
-                    _ => Self::Unknown,
-                }
-            }
-            _ => Self::Unknown,
-        };
+    pub fn is_scalar(&self) -> bool {
+        self.value.is_none() && self.min == 1 && self.max == 1
+    }
 
-        Ok(kind)
+    pub fn is_optional(&self) -> bool {
+        self.min == 0 && self.max == 1
+    }
+
+    pub fn is_composite(&self) -> bool {
+        self.max > 1
+    }
+
+    pub fn is_set(&self) -> bool {
+        self.value.is_none() && (self.min != 1 || self.max != 1)
+    }
+
+    pub fn is_map(&self) -> bool {
+        self.value.is_some()
+    }
+
+    pub fn is_enum(&self) -> bool {
+        self.value.is_none() && self.key.choices.is_some()
+    }
+
+    pub fn is_optional_pointer(&self) -> bool {
+        self.is_optional()
+            && self.value.is_none()
+            && (self.key.kind == Atomic::String || self.key.ref_table.is_some())
     }
 }
 
-impl ToTokens for Kind {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            Self::Boolean => {
-                tokens.append(format_ident!("{}", "bool"));
-            }
-            Self::Integer(_) => {
-                tokens.append(format_ident!("{}", "i64"));
-            }
-            Self::Real(_) => {
-                tokens.append(format_ident!("{}", "f64"));
-            }
-            Self::String(_) => {
-                tokens.append(format_ident!("{}", "String"));
-            }
-            Self::Uuid { .. } => {
-                tokens.extend(quote! {
-                    protocol::Uuid
-                });
-            }
-            Self::Map { key, value } => {
-                tokens.extend(quote! {
-                    protocol::Map<#key, #value>
-                });
-            }
-            _ => unreachable!(),
+impl Default for Kind {
+    fn default() -> Self {
+        Self {
+            key: BaseKind::default(),
+            value: None,
+            min: 1,
+            max: 1,
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for Kind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct KindVisitor;
+
+        impl<'de> Visitor<'de> for KindVisitor {
+            type Value = Kind;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("`map` or `string`")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match Atomic::from_str(value) {
+                    Ok(a) => Ok(Self::Value::new(BaseKind::new(a))),
+                    Err(_) => Err(de::Error::invalid_value(
+                        de::Unexpected::Str(value),
+                        &"one of `boolean`, `integer`, `real`, `string`, `uuid`",
+                    )),
+                }
+            }
+
+            fn visit_map<S>(self, mut obj: S) -> Result<Self::Value, S::Error>
+            where
+                S: MapAccess<'de>,
+            {
+                let mut key: Option<BaseKind> = None;
+                let mut value: Option<BaseKind> = None;
+                let mut min: i64 = 1;
+                let mut max: i64 = 1;
+
+                while let Some((k, v)) = obj.next_entry::<String, serde_json::Value>()? {
+                    match k.as_str() {
+                        "key" => key = serde_json::from_value(v).map_err(de::Error::custom)?,
+                        "value" => {
+                            value = Some(serde_json::from_value(v).map_err(de::Error::custom)?)
+                        }
+                        "min" => min = serde_json::from_value(v).map_err(de::Error::custom)?,
+                        "max" => {
+                            max = if v.is_string() {
+                                if v.as_str() == Some("unlimited") {
+                                    -1
+                                } else {
+                                    // BIG ERROR
+                                    todo!()
+                                }
+                            } else {
+                                serde_json::from_value(v).map_err(de::Error::custom)?
+                            }
+                        }
+                        _ => Err(de::Error::unknown_field(
+                            &k,
+                            &["key", "value", "min", "max"],
+                        ))?,
+                    }
+                }
+
+                if let Some(k) = key {
+                    Ok(Self::Value {
+                        key: k,
+                        value,
+                        min,
+                        max,
+                    })
+                } else {
+                    Err(de::Error::missing_field("key"))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(KindVisitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_base_kind_integer_string() {
+        let data = r#""integer""#;
+        let k: BaseKind = serde_json::from_str(data).unwrap();
+        assert_eq!(k.kind, Atomic::Integer);
+    }
+
+    #[test]
+    fn test_base_kind_integer_key() {
+        let data = r#"{"type": "integer"}"#;
+        let k: BaseKind = serde_json::from_str(data).unwrap();
+        assert_eq!(k.kind, Atomic::Integer);
+    }
+
+    #[test]
+    fn test_base_kind_integer_full() {
+        let data = r#"{"type": "integer", "minInteger": 1, "maxInteger": 100}"#;
+        let k: BaseKind = serde_json::from_str(data).unwrap();
+        assert_eq!(k.kind, Atomic::Integer);
+        assert_eq!(k.min_integer, Some(1));
+        assert_eq!(k.max_integer, Some(100));
+    }
+
+    #[test]
+    fn test_kind_string() {
+        let data = r#""boolean""#;
+        let k: Kind = serde_json::from_str(data).unwrap();
+        assert_eq!(k.key.kind, Atomic::Boolean);
+        assert_eq!(k.value, None);
+        assert_eq!(k.min, 1);
+        assert_eq!(k.max, 1);
+    }
+
+    #[test]
+    fn test_kind_simple_key() {
+        let data = r#"{"key": "boolean"}"#;
+        let k: Kind = serde_json::from_str(data).unwrap();
+        assert_eq!(k.key.kind, Atomic::Boolean);
+        assert_eq!(k.value, None);
+        assert_eq!(k.min, 1);
+        assert_eq!(k.max, 1);
+    }
+
+    #[test]
+    fn test_kind_complex_key() {
+        let data = r#"{"key": {"type": "boolean"}, "min": 1, "max": 100}"#;
+        let k: Kind = serde_json::from_str(data).unwrap();
+        assert_eq!(k.key.kind, Atomic::Boolean);
+        assert_eq!(k.value, None);
+        assert_eq!(k.min, 1);
+        assert_eq!(k.max, 100);
     }
 }

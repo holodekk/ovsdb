@@ -1,112 +1,163 @@
-use std::convert::From;
-
-use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote, ToTokens};
+use quote::{quote, ToTokens};
+use syn::parse_quote;
 
-use ovsdb::schema::{Column, Kind};
+use ovsdb::schema::{Atomic, Column};
 
-use super::{Attribute, FieldEnum};
+use crate::{name_to_ident, Attributes};
+
+fn atomic_to_native_type(atomic: &Atomic) -> syn::Type {
+    match atomic {
+        Atomic::Boolean => parse_quote! { bool },
+        Atomic::Integer => parse_quote! { i64 },
+        Atomic::Real => parse_quote! { f64 },
+        Atomic::String => parse_quote! { String },
+        Atomic::Uuid => parse_quote! { ovsdb::protocol::Uuid },
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum Kind {
+    Atomic(Atomic),
+    Enum(String, Atomic),
+    Map(Atomic, Atomic),
+    Optional(Box<Kind>),
+    Set(Box<Kind>),
+}
+
+impl Kind {
+    pub fn to_native_type(&self) -> syn::Type {
+        match self {
+            Self::Atomic(a) => {
+                let kind = atomic_to_native_type(a);
+                parse_quote! { #kind }
+            }
+            Self::Enum(name, _) => {
+                let enum_name = super::name_to_ident(name);
+                parse_quote! { #enum_name }
+            }
+            Self::Map(k, v) => {
+                let key_kind = atomic_to_native_type(k);
+                let value_kind = atomic_to_native_type(v);
+                parse_quote! { std::collections::BTreeMap<#key_kind, #value_kind> }
+            }
+            Self::Optional(v) => {
+                let value = v.to_native_type();
+                parse_quote! { Option<#value> }
+            }
+            Self::Set(v) => {
+                let value = v.to_native_type();
+                parse_quote! { Vec<#value> }
+            }
+        }
+    }
+
+    pub fn to_ovsdb_type(&self) -> syn::Type {
+        match self {
+            Self::Atomic(a) => {
+                let kind = atomic_to_native_type(a);
+                parse_quote! { #kind }
+            }
+            Self::Enum(name, _) => {
+                let enum_name = super::name_to_ident(name);
+                parse_quote! { #enum_name }
+            }
+            Self::Map(k, v) => {
+                let key_kind = atomic_to_native_type(k);
+                let value_kind = atomic_to_native_type(v);
+                parse_quote! { ovsdb::protocol::Map<#key_kind, #value_kind> }
+            }
+            Self::Optional(v) => {
+                let value = v.to_ovsdb_type();
+                parse_quote! { ovsdb::protocol::Optional<#value> }
+            }
+            Self::Set(v) => {
+                let value = v.to_ovsdb_type();
+                if matches!(**v, Self::Atomic(Atomic::Uuid)) {
+                    parse_quote! { ovsdb::protocol::UuidSet }
+                } else {
+                    parse_quote! { ovsdb::protocol::Set<#value> }
+                }
+            }
+        }
+    }
+
+    pub fn from_column(column: &Column) -> Self {
+        let mut field_kind = Self::Atomic(column.kind.key.kind.clone());
+
+        if column.kind.is_enum() {
+            field_kind = Self::Enum(
+                super::str_to_name(&column.name),
+                column.kind.key.kind.clone(),
+            );
+        }
+
+        if !column.kind.is_scalar() {
+            if column.kind.is_optional() {
+                field_kind = Self::Optional(Box::new(field_kind));
+            } else if column.kind.is_set() {
+                field_kind = Self::Set(Box::new(field_kind));
+            } else if column.kind.is_map() {
+                let key_kind = &column.kind.key.kind;
+                let value_kind = &column.kind.value.as_ref().unwrap().kind;
+                field_kind = Self::Map(key_kind.clone(), value_kind.clone());
+            }
+        }
+
+        field_kind
+    }
+}
 
 #[derive(Debug)]
-pub struct Field {
-    name: syn::Ident,
-    attributes: Vec<Attribute>,
-    kind: TokenStream,
-    enumerations: Vec<FieldEnum>,
+pub(crate) struct Field {
+    ident: syn::Ident,
+    ty: syn::Type,
+    attributes: Attributes,
 }
 
 impl Field {
-    pub fn new<S>(name: S) -> Self
+    pub fn new<T>(name: T, ty: syn::Type) -> Self
     where
-        S: AsRef<str>,
+        T: AsRef<str>,
     {
-        let mut attributes: Vec<Attribute> = vec![];
-        let sanitized = Self::sanitize(&name, &mut attributes);
-        Self {
-            name: format_ident!("{}", sanitized),
-            attributes,
-            kind: quote! { INVALID },
-            enumerations: vec![],
-        }
-    }
-
-    fn sanitize<S>(name: S, attrs: &mut Vec<Attribute>) -> String
-    where
-        S: AsRef<str>,
-    {
-        match name.as_ref() {
+        let mut attributes = Attributes::default();
+        let ident = match name.as_ref() {
             "type" => {
-                attrs.push(Attribute::from("#[serde(rename = \"type\")]"));
-                "kind".to_string()
+                attributes.add("#[serde(rename = \"type\")]");
+                name_to_ident("kind")
             }
-            _ => name.as_ref().into(),
+            _ => name_to_ident(name),
+        };
+
+        Self {
+            ident,
+            ty,
+            attributes,
         }
     }
 
-    pub fn set_kind(&mut self, kind: TokenStream) {
-        self.kind = kind;
+    pub fn ident(&self) -> &syn::Ident {
+        &self.ident
     }
 
-    pub fn add_attribute<S>(&mut self, attr: S)
-    where
-        S: AsRef<str>,
-    {
-        self.attributes.push(Attribute::from(attr));
+    fn ty(&self) -> &syn::Type {
+        &self.ty
     }
 
-    pub fn add_enumeration(&mut self, enumeration: FieldEnum) {
-        self.enumerations.push(enumeration);
-    }
-
-    pub fn enumerations(&self) -> &Vec<FieldEnum> {
-        &self.enumerations
+    fn attributes(&self) -> &Attributes {
+        &self.attributes
     }
 }
 
 impl ToTokens for Field {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let field_ident = &self.name;
-        let field_kind = &self.kind;
-        let attrs = &self.attributes;
-
+        let ident = self.ident();
+        let ty = self.ty();
+        let attributes = self.attributes();
         tokens.extend(quote! {
-            #(#attrs)*
-            #field_ident: #field_kind
+            #(#attributes)*
+            #ident: #ty
         });
-    }
-}
-
-impl From<&Column> for Field {
-    fn from(column: &Column) -> Self {
-        let k = &column.kind;
-        let kind = if column.is_set() {
-            quote! { protocol::Set<#k> }
-        } else {
-            quote! { #k }
-        };
-        let mut field = Self::new(&column.name);
-        field.set_kind(kind);
-
-        if let Kind::String(c) = &column.kind {
-            if let Some(options) = &c.options {
-                let name = column.name.to_case(Case::UpperCamel);
-                let enumeration = FieldEnum::builder()
-                    .name(name)
-                    .attribute("#[derive(Debug, Deserialize, PartialEq, Serialize)]")
-                    .attribute("#[serde(rename_all = \"snake_case\")]")
-                    .values(options)
-                    .value("None")
-                    .default_value("None")
-                    .build();
-                let e = &enumeration.name();
-                field.set_kind(quote! { #e });
-                field.add_attribute("#[serde(with = \"protocol::enumeration\")]");
-                field.add_enumeration(enumeration);
-            }
-        }
-
-        field
     }
 }
 
@@ -116,25 +167,148 @@ mod tests {
 
     use std::io::prelude::*;
 
-    #[test]
-    fn test_field() {
-        let expected = r#"struct Test {
-    #[serde(with = "protocol::enumeration")]
-    color: Color,
-}
-"#;
-        let mut field = Field::new("color");
-        field.set_kind(quote! { Color });
-        field.add_attribute(r#"#[serde(with = "protocol::enumeration")]"#);
+    fn test_struct(v: &Field) -> String {
+        let f: syn::File = syn::parse_quote! { struct Test { #v } };
         let mut buffer = Vec::new();
-        let parsed: syn::File = syn::parse2(quote! {
-        struct Test {
-            #field
-        }})
-        .unwrap();
         buffer
-            .write_all(prettyplease::unparse(&parsed).as_bytes())
+            .write_all(prettyplease::unparse(&f).as_bytes())
             .unwrap();
-        assert_eq!(String::from_utf8(buffer).unwrap(), expected);
+        String::from_utf8(buffer).unwrap()
+    }
+
+    #[test]
+    fn test_field_boolean() {
+        let native_field = Field::new("test", Kind::Atomic(Atomic::Boolean).to_native_type());
+        let ovsdb_field = Field::new("test", Kind::Atomic(Atomic::Boolean).to_ovsdb_type());
+        let expected = "struct Test {\n    test: bool,\n}\n";
+
+        assert_eq!(&test_struct(&native_field), expected);
+        assert_eq!(&test_struct(&ovsdb_field), expected);
+    }
+
+    #[test]
+    fn test_field_integer() {
+        let native_field = Field::new("test", Kind::Atomic(Atomic::Integer).to_native_type());
+        let ovsdb_field = Field::new("test", Kind::Atomic(Atomic::Integer).to_ovsdb_type());
+        let expected = "struct Test {\n    test: i64,\n}\n";
+
+        assert_eq!(&test_struct(&native_field), expected);
+        assert_eq!(&test_struct(&ovsdb_field), expected);
+    }
+
+    #[test]
+    fn test_field_real() {
+        let native_field = Field::new("test", Kind::Atomic(Atomic::Real).to_native_type());
+        let ovsdb_field = Field::new("test", Kind::Atomic(Atomic::Real).to_ovsdb_type());
+        let expected = "struct Test {\n    test: f64,\n}\n";
+
+        assert_eq!(&test_struct(&native_field), expected);
+        assert_eq!(&test_struct(&ovsdb_field), expected);
+    }
+
+    #[test]
+    fn test_field_string() {
+        let native_field = Field::new("test", Kind::Atomic(Atomic::String).to_native_type());
+        let ovsdb_field = Field::new("test", Kind::Atomic(Atomic::String).to_ovsdb_type());
+        let expected = "struct Test {\n    test: String,\n}\n";
+
+        assert_eq!(&test_struct(&native_field), expected);
+        assert_eq!(&test_struct(&ovsdb_field), expected);
+    }
+
+    #[test]
+    fn test_field_uuid() {
+        let native_field = Field::new("test", Kind::Atomic(Atomic::Uuid).to_native_type());
+        let ovsdb_field = Field::new("test", Kind::Atomic(Atomic::Uuid).to_ovsdb_type());
+        let expected = "struct Test {\n    test: ovsdb::protocol::Uuid,\n}\n";
+
+        assert_eq!(&test_struct(&native_field), expected);
+        assert_eq!(&test_struct(&ovsdb_field), expected);
+    }
+
+    #[test]
+    fn test_field_enum() {
+        let native_field = Field::new(
+            "test",
+            Kind::Enum("Test".to_string(), Atomic::String).to_native_type(),
+        );
+        let ovsdb_field = Field::new(
+            "test",
+            Kind::Enum("Test".to_string(), Atomic::String).to_ovsdb_type(),
+        );
+        let expected = "struct Test {\n    test: Test,\n}\n";
+
+        assert_eq!(&test_struct(&native_field), expected);
+        assert_eq!(&test_struct(&ovsdb_field), expected);
+    }
+
+    #[test]
+    fn test_field_map() {
+        let native_field = Field::new(
+            "test",
+            Kind::Map(Atomic::String, Atomic::Integer).to_native_type(),
+        );
+        let ovsdb_field = Field::new(
+            "test",
+            Kind::Map(Atomic::String, Atomic::Integer).to_ovsdb_type(),
+        );
+        let expected_native =
+            "struct Test {\n    test: std::collections::BTreeMap<String, i64>,\n}\n";
+        let expected_ovsdb = "struct Test {\n    test: ovsdb::protocol::Map<String, i64>,\n}\n";
+
+        assert_eq!(&test_struct(&native_field), expected_native);
+        assert_eq!(&test_struct(&ovsdb_field), expected_ovsdb);
+    }
+
+    #[test]
+    fn test_field_optional() {
+        let native_field = Field::new(
+            "test",
+            Kind::Optional(Box::new(Kind::Atomic(Atomic::Uuid))).to_native_type(),
+        );
+        let ovsdb_field = Field::new(
+            "test",
+            Kind::Optional(Box::new(Kind::Atomic(Atomic::Uuid))).to_ovsdb_type(),
+        );
+        let expected_native = "struct Test {\n    test: Option<ovsdb::protocol::Uuid>,\n}\n";
+        let expected_ovsdb =
+            "struct Test {\n    test: ovsdb::protocol::Optional<ovsdb::protocol::Uuid>,\n}\n";
+
+        assert_eq!(&test_struct(&native_field), expected_native);
+        assert_eq!(&test_struct(&ovsdb_field), expected_ovsdb);
+    }
+
+    #[test]
+    fn test_field_set() {
+        let native_field = Field::new(
+            "test",
+            Kind::Set(Box::new(Kind::Atomic(Atomic::String))).to_native_type(),
+        );
+        let ovsdb_field = Field::new(
+            "test",
+            Kind::Set(Box::new(Kind::Atomic(Atomic::String))).to_ovsdb_type(),
+        );
+        let expected_native = "struct Test {\n    test: Vec<String>,\n}\n";
+        let expected_ovsdb = "struct Test {\n    test: ovsdb::protocol::Set<String>,\n}\n";
+
+        assert_eq!(&test_struct(&native_field), expected_native);
+        assert_eq!(&test_struct(&ovsdb_field), expected_ovsdb);
+    }
+
+    #[test]
+    fn test_field_uuid_set() {
+        let native_field = Field::new(
+            "test",
+            Kind::Set(Box::new(Kind::Atomic(Atomic::Uuid))).to_native_type(),
+        );
+        let ovsdb_field = Field::new(
+            "test",
+            Kind::Set(Box::new(Kind::Atomic(Atomic::Uuid))).to_ovsdb_type(),
+        );
+        let expected_native = "struct Test {\n    test: Vec<ovsdb::protocol::Uuid>,\n}\n";
+        let expected_ovsdb = "struct Test {\n    test: ovsdb::protocol::UuidSet,\n}\n";
+
+        assert_eq!(&test_struct(&native_field), expected_native);
+        assert_eq!(&test_struct(&ovsdb_field), expected_ovsdb);
     }
 }

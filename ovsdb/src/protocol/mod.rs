@@ -1,38 +1,113 @@
-use serde::{de::DeserializeOwned, Serialize};
-
 mod codec;
-pub use codec::Codec;
+pub use codec::{Codec, CodecError};
 
 mod request;
 pub use request::*;
 mod response;
 pub use response::*;
 
-pub mod enumeration;
+// pub mod enumeration;
 mod map;
 pub use map::*;
 mod message;
 pub use message::Message;
+mod optional;
+pub use optional::Optional;
 mod set;
 pub use set::*;
 mod uuid;
 pub use self::uuid::*;
 
-#[derive(thiserror::Error, Debug)]
-pub enum Error {}
+#[cfg(test)]
+mod tests {
+    use crate::protocol;
+    use serde::Deserialize;
 
-pub fn encode<T>(value: T) -> Result<Vec<u8>, crate::Error>
-where
-    T: Serialize,
-{
-    let res = serde_json::to_vec(&value)?;
-    Ok(res)
-}
-
-pub fn decode<T>(value: serde_json::Value) -> Result<T, crate::Error>
-where
-    T: DeserializeOwned,
-{
-    let res = serde_json::from_value::<T>(value)?;
-    Ok(res)
+    #[test]
+    fn test_parse() {
+        #[derive(Deserialize, PartialEq)]
+        #[serde(rename_all = "snake_case")]
+        pub enum TestFailMode {
+            Secure,
+            Standalone,
+            None,
+        }
+        impl Default for TestFailMode {
+            fn default() -> Self {
+                Self::None
+            }
+        }
+        #[derive(Clone, Deserialize, PartialEq)]
+        #[serde(rename_all = "snake_case")]
+        pub enum TestProtocols {
+            OpenFlow10,
+            OpenFlow11,
+            OpenFlow12,
+            OpenFlow13,
+            OpenFlow14,
+            OpenFlow15,
+            None,
+        }
+        #[derive(Deserialize)]
+        pub struct TestBridge {
+            pub auto_attach: protocol::Set<protocol::Uuid>,
+            pub controller: protocol::Set<protocol::Uuid>,
+            pub datapath_id: protocol::Optional<String>,
+            pub datapath_type: String,
+            pub datapath_version: String,
+            pub external_ids: protocol::Map<String, String>,
+            pub fail_mode: protocol::Optional<TestFailMode>,
+            pub flood_vlans: protocol::Set<i64>,
+            pub flow_tables: protocol::Map<i64, protocol::Uuid>,
+            pub ipfix: protocol::Set<protocol::Uuid>,
+            pub mcast_snooping_enable: bool,
+            pub mirrors: protocol::Set<protocol::Uuid>,
+            pub name: String,
+            pub netflow: protocol::Set<protocol::Uuid>,
+            pub other_config: protocol::Map<String, String>,
+            pub ports: protocol::Set<protocol::Uuid>,
+            pub protocols: protocol::Set<TestProtocols>,
+            pub rstp_enable: bool,
+            pub rstp_status: protocol::Map<String, String>,
+            pub sflow: protocol::Set<protocol::Uuid>,
+            pub status: protocol::Map<String, String>,
+            pub stp_enable: bool,
+        }
+        let data = r#"{
+    "rstp_status":["map",[]],
+    "_uuid":["uuid","06234b93-6b4b-4f92-be8a-342dd858617c"],
+    "datapath_version":"<unknown>",
+    "_version":["uuid","1ef13326-744a-4065-82ee-0998ff56dcc8"],
+    "flow_tables":["map",[]],
+    "protocols":["set",[]],
+    "auto_attach":["set",[]],
+    "mcast_snooping_enable":false,
+    "flood_vlans":["set",[]],
+    "stp_enable":false,
+    "name":"br0",
+    "sflow":["set",[]],
+    "ports":["set",[
+        ["uuid","67087d8a-1b61-408a-a448-a239248b9f7d"],
+        ["uuid","c16f3aaa-907f-4e81-86c9-4ef845b8990e"],
+        ["uuid","d05c07dd-3455-48a4-8e9e-d1f0236375b8"],
+        ["uuid","d3bbf06e-e460-4162-93cf-7237bb326630"],
+        ["uuid","df192fe4-a87a-45c3-b89c-a690da1d9a8d"],
+        ["uuid","e5bc7326-7da8-4427-9efc-2d4b347d8add"],
+        ["uuid","ef799d87-0b7c-40ad-bfab-5065970931d7"],
+        ["uuid","fd190439-d354-49cd-b4cb-24f9eb7f850c"]
+    ]],
+    "mirrors":["set",[]],
+    "netflow":["set",[]],
+    "external_ids":["map",[]],
+    "other_config":["map",[]],
+    "datapath_type":"",
+    "fail_mode":["set",[]],
+    "datapath_id":"000004421af07474",
+    "controller":["set",[]],
+    "ipfix":["set",[]],
+    "rstp_enable":false,
+    "status":["map",[]]
+}"#;
+        let _test_bridge: TestBridge = serde_json::from_str(&data).unwrap();
+    }
 }

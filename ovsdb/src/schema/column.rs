@@ -1,96 +1,64 @@
-use serde::{Deserialize, Deserializer};
+use serde::{
+    de::{self, Deserializer, MapAccess, Visitor},
+    Deserialize,
+};
 use serde_json::Value;
 
 use super::Kind;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Column {
     pub name: String,
     pub kind: Kind,
-    pub min: Option<i64>,
-    pub max: Option<i64>,
     pub ephemeral: Option<bool>,
     pub mutable: Option<bool>,
 }
 
-impl Column {
-    pub fn is_enum(&self) -> bool {
-        self.kind.is_enum()
-    }
-    pub fn is_set(&self) -> bool {
-        match &self.kind {
-            Kind::Map { .. } => false,
-            Kind::Uuid { ref_table, .. } => match self.min {
-                Some(0) => ref_table.is_some(),
-                _ => false,
-            },
-            _ => {
-                if self.min.is_some()
-                    && self.max.is_some()
-                    && (self.min.unwrap() != 1 || self.max.unwrap() != 1)
-                {
-                    if self.kind.is_enum() {
-                        if self.max.unwrap() != 1 {
-                            return true;
-                        }
-                    } else {
-                        return true;
-                    }
-                }
-
-                false
-            }
-        }
-    }
-
-    pub fn is_optional(&self) -> bool {
-        self.min.is_some() && self.max.is_some() && self.min.unwrap() == 0 && self.max.unwrap() == 1
-    }
-}
-
 impl<'de> Deserialize<'de> for Column {
-    fn deserialize<D>(de: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let mut min = None;
-        let mut max = None;
+        struct ColumnVisitor;
 
-        let data = Value::deserialize(de)?;
+        impl<'de> Visitor<'de> for ColumnVisitor {
+            type Value = Column;
 
-        let obj = data.as_object().unwrap();
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("`map`")
+            }
 
-        let ephemeral = obj
-            .get("ephemeral")
-            .map(|e| e.as_bool().expect("convert `ephemeral` to `bool`"));
-        let mutable = obj
-            .get("mutable")
-            .map(|m| m.as_bool().expect("convert `mutable` to `bool`"));
+            fn visit_map<S>(self, mut value: S) -> Result<Self::Value, S::Error>
+            where
+                S: MapAccess<'de>,
+            {
+                let mut column = Column::default();
 
-        let kind = Kind::from_value(&data).unwrap();
-
-        if obj.get("type").unwrap().is_object() {
-            let typ = obj.get("type").unwrap().as_object().unwrap();
-
-            min = typ.get("min").map(|m| m.as_i64().unwrap());
-            max = typ.get("max").map(|m| match m {
-                Value::String(v) => match v.as_str() {
-                    "unlimited" => -1,
-                    _ => panic!("Unexpected string value for max: {}", v),
-                },
-                Value::Number(v) => v.as_i64().unwrap(),
-                _ => panic!("Unexpected type for max: {}", m),
-            });
+                while let Some((k, v)) = value.next_entry::<String, Value>()? {
+                    match k.as_str() {
+                        "type" => {
+                            let k: Kind = serde_json::from_value(v).map_err(de::Error::custom)?;
+                            column.kind = k;
+                        }
+                        "ephemeral" => {
+                            let e: bool = serde_json::from_value(v).map_err(de::Error::custom)?;
+                            column.ephemeral = Some(e);
+                        }
+                        "mutable" => {
+                            let m: bool = serde_json::from_value(v).map_err(de::Error::custom)?;
+                            column.mutable = Some(m);
+                        }
+                        _ => Err(de::Error::unknown_field(
+                            &k,
+                            &["type", "ephemeral", "mutable"],
+                        ))?,
+                    }
+                }
+                Ok(column)
+            }
         }
 
-        Ok(Column {
-            name: "".to_string(),
-            kind,
-            min,
-            max,
-            ephemeral,
-            mutable,
-        })
+        deserializer.deserialize_map(ColumnVisitor)
     }
 }
 
@@ -98,205 +66,102 @@ impl<'de> Deserialize<'de> for Column {
 mod tests {
     use super::*;
 
-    use crate::schema::RefType;
+    use crate::schema::{Atomic, RefType};
 
     #[test]
-    fn handles_boolean() {
+    fn test_column_boolean() {
         let data = r#"{ "type": "boolean" }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert_eq!(c.kind, Kind::Boolean);
+        assert_eq!(c.kind.key.kind, Atomic::Boolean);
+        assert_eq!(c.ephemeral, None);
+        assert_eq!(c.mutable, None);
     }
 
     #[test]
-    fn handles_scalar_integer() {
+    fn test_column_integer() {
         let data = r#"{ "type": "integer" }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::Integer(_)));
+        assert!(matches!(c.kind.key.kind, Atomic::Integer));
+        assert_eq!(c.ephemeral, None);
+        assert_eq!(c.mutable, None);
     }
 
     #[test]
-    fn handles_complex_integer() {
+    fn test_column_complex_integer() {
         let data = r#"{ "type": { "key": "integer" } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::Integer(_)));
+        assert!(matches!(c.kind.key.kind, Atomic::Integer));
+        assert_eq!(c.ephemeral, None);
+        assert_eq!(c.mutable, None);
     }
 
     #[test]
-    fn handles_complex_integer_with_constrints() {
+    fn test_column_complex_integer_with_constrints() {
         let data =
             r#"{ "type": { "key": { "type": "integer", "minInteger": 0, "maxInteger": 100 } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::Integer(_)));
-        if let Kind::Integer(constraints) = c.kind {
-            assert_eq!(constraints.min, Some(0));
-            assert_eq!(constraints.max, Some(100));
-            assert_eq!(constraints.options, None);
-        } else {
-            panic!()
-        }
+        assert!(matches!(c.kind.key.kind, Atomic::Integer));
+        assert_eq!(c.kind.key.min_integer, Some(0));
+        assert_eq!(c.kind.key.max_integer, Some(100));
+        assert_eq!(c.ephemeral, None);
+        assert_eq!(c.mutable, None);
     }
 
     #[test]
-    fn handles_integer_enum() {
-        let data = r#"{ "type": { "key": { "type": "integer", "enum": ["set", [0, 1, 2]] } } }"#;
+    fn test_column_string_enum() {
+        let data = r#"{ "type": { "key": { "type": "string", "enum": ["set", ["red", "blue", "green"]] } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::Integer(_)));
-        if let Kind::Integer(constraints) = c.kind {
-            assert_eq!(constraints.min, None);
-            assert_eq!(constraints.max, None);
-            assert_eq!(constraints.options, Some(vec![0, 1, 2]));
-        } else {
-            panic!()
-        }
+        assert!(matches!(c.kind.key.kind, Atomic::String));
+        assert_eq!(
+            c.kind.key.choices,
+            Some(crate::protocol::Set(vec![
+                "red".to_string(),
+                "blue".to_string(),
+                "green".to_string()
+            ]))
+        );
+        assert_eq!(c.ephemeral, None);
+        assert_eq!(c.mutable, None);
     }
 
     #[test]
-    fn handles_scalar_real() {
-        let data = r#"{ "type": "real" }"#;
+    fn test_column_complex_uuid() {
+        let data = r#"{ "type": { "key": { "type": "uuid", "refTable": "other_table", "refType": "weak" } }, "ephemeral": false, "mutable": true }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::Real(_)));
+        assert!(matches!(c.kind.key.kind, Atomic::Uuid));
+        assert_eq!(c.kind.key.ref_table.as_deref(), Some("other_table"));
+        assert_eq!(c.kind.key.ref_type, Some(RefType::Weak));
+        assert_eq!(c.ephemeral, Some(false));
+        assert_eq!(c.mutable, Some(true));
     }
 
     #[test]
-    fn handles_complex_real() {
-        let data = r#"{ "type": { "key": "real" } }"#;
-        let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::Real(_)));
-    }
-
-    #[test]
-    fn handles_complex_real_with_constraints() {
-        let data = r#"{ "type": { "key": { "type": "real", "minReal": 1.1, "maxReal": 2.2 } } }"#;
-        let c: Column = serde_json::from_str(data).unwrap();
-        if let Kind::Real(constraints) = c.kind {
-            assert_eq!(constraints.min, Some(1.1));
-            assert_eq!(constraints.max, Some(2.2));
-            assert_eq!(constraints.options, None);
-        } else {
-            panic!()
-        }
-    }
-
-    #[test]
-    fn handles_real_enum() {
-        let data = r#"{ "type": { "key": { "type": "real", "enum": ["set", [1.1, 2.2, 3.3]] } } }"#;
-        let c: Column = serde_json::from_str(data).unwrap();
-        if let Kind::Real(constraints) = c.kind {
-            assert_eq!(constraints.min, None);
-            assert_eq!(constraints.max, None);
-            assert_eq!(constraints.options, Some(vec![1.1, 2.2, 3.3]));
-        } else {
-            panic!()
-        }
-    }
-
-    #[test]
-    fn handles_scalar_string() {
-        let data = r#"{ "type": "string" }"#;
-        let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::String(_)));
-    }
-
-    #[test]
-    fn handles_complex_string() {
-        let data = r#"{ "type": { "key": "string" } }"#;
-        let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::String(_)));
-    }
-
-    #[test]
-    fn handles_complex_string_with_constraints() {
-        let data =
-            r#"{ "type": { "key": { "type": "string", "minLength": 0, "maxLength": 32 } } }"#;
-        let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::String(_)));
-        if let Kind::String(constraints) = c.kind {
-            assert_eq!(constraints.min, Some(0));
-            assert_eq!(constraints.max, Some(32));
-            assert_eq!(constraints.options, None);
-        } else {
-            panic!()
-        }
-    }
-
-    #[test]
-    fn handles_string_enum() {
-        let data = r#"{ "type": { "key": { "type": "string", "enum": ["set", ["One", "Two", "Three"]] } } }"#;
-        let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::String(_)));
-        if let Kind::String(constraints) = c.kind {
-            assert_eq!(constraints.min, None);
-            assert_eq!(constraints.max, None);
-            assert_eq!(
-                constraints.options,
-                Some(vec![
-                    "One".to_string(),
-                    "Two".to_string(),
-                    "Three".to_string()
-                ])
-            );
-        } else {
-            panic!()
-        }
-    }
-
-    #[test]
-    fn handles_scalar_uuid() {
-        let data = r#"{ "type": "uuid" }"#;
-        let c: Column = serde_json::from_str(data).unwrap();
-        assert!(matches!(c.kind, Kind::Uuid { .. }));
-    }
-
-    #[test]
-    fn handles_complex_uuid() {
-        let data = r#"{ "type": { "key": { "type": "uuid", "refTable": "other_table", "refType": "weak" } } }"#;
-        let c: Column = serde_json::from_str(data).unwrap();
-        if let Kind::Uuid {
-            ref_table,
-            ref_type,
-        } = c.kind
-        {
-            assert_eq!(ref_table, Some("other_table".to_string()));
-            assert_eq!(ref_type, Some(RefType::Weak));
-        } else {
-            panic!()
-        }
-    }
-
-    #[test]
-    fn handles_simple_map() {
+    fn test_column_simple_map() {
         let data = r#"{ "type": { "key": "string", "value": "string" } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        if let Kind::Map { key, value } = c.kind {
-            assert!(matches!(*key, Kind::String(_)));
-            assert!(matches!(*value, Kind::String(_)));
-        } else {
-            panic!();
-        }
+        assert!(matches!(c.kind.key.kind, Atomic::String));
+        assert!(matches!(c.kind.value.unwrap().kind, Atomic::String));
+        assert_eq!(c.ephemeral, None);
+        assert_eq!(c.mutable, None);
     }
 
     #[test]
-    fn handles_complex_map() {
+    fn test_column_complex_map() {
         let data = r#"{ "type": { "key": { "type": "string", "enum": ["set", ["width", "height"]] }, "value": { "type": "string", "minLength": 5, "maxLength": 20 } } }"#;
         let c: Column = serde_json::from_str(data).unwrap();
-        if let Kind::Map { key, value } = c.kind {
-            if let Kind::String(constraints) = *key {
-                assert_eq!(
-                    constraints.options,
-                    Some(vec!["width".to_string(), "height".to_string(),])
-                );
-            } else {
-                panic!();
-            }
-            if let Kind::String(constraints) = *value {
-                assert_eq!(constraints.min, Some(5));
-                assert_eq!(constraints.max, Some(20));
-                assert_eq!(constraints.options, None);
-            } else {
-                panic!();
-            }
-        } else {
-            panic!();
-        }
+        assert!(matches!(c.kind.key.kind, Atomic::String));
+        assert_eq!(
+            c.kind.key.choices,
+            Some(crate::protocol::Set(vec![
+                "width".to_string(),
+                "height".to_string(),
+            ]))
+        );
+        let value = c.kind.value.unwrap();
+        assert!(matches!(&value.kind, Atomic::String));
+        assert!(matches!(&value.min_length, Some(5)));
+        assert!(matches!(&value.max_length, Some(20)));
+        assert_eq!(c.ephemeral, None);
+        assert_eq!(c.mutable, None);
     }
 }

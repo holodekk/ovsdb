@@ -1,21 +1,19 @@
 use std::fs::File;
-use std::io::prelude::*;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use convert_case::{Case, Casing};
-use quote::quote;
-
 use ovsdb::schema::Schema;
+use quote::format_ident;
 
-mod attribute;
+mod attributes;
+mod entity;
+mod enumeration;
 mod field;
-mod field_enum;
-mod model;
-
-use attribute::Attribute;
-use field::Field;
-use field_enum::FieldEnum;
-use model::Model;
+use attributes::Attributes;
+use entity::Entity;
+use enumeration::Enumeration;
+use field::{Field, Kind};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -27,6 +25,20 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub fn str_to_name<T>(str: T) -> String
+where
+    T: AsRef<str>,
+{
+    str.as_ref().to_case(Case::UpperCamel)
+}
+
+pub fn name_to_ident<T>(name: T) -> syn::Ident
+where
+    T: AsRef<str>,
+{
+    format_ident!("{}", name.as_ref())
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Builder {
     out_dir: Option<PathBuf>,
@@ -37,36 +49,20 @@ impl Builder {
         Self::default()
     }
 
-    pub fn generate_models(&self, schema: &Schema, directory: &Path) -> Result<()> {
+    pub fn generate_modules(&self, schema: &Schema, directory: &Path) -> Result<()> {
         std::fs::create_dir_all(directory)?;
 
         let mod_filename = directory.join("mod.rs");
         let mut mod_file = File::create(mod_filename)?;
         for table in &schema.tables {
             let filename = directory.join(format!("{}.rs", table.name.to_case(Case::Snake)));
-            let mut output_file = File::create(filename)?;
-
-            let model = Model::builder()
-                .name(&table.name)
-                .attribute("#[derive(Debug, Deserialize, Serialize)]")
-                .fields(table.columns.iter().map(|c| c.into()).collect())
-                .build();
-
-            let tokens = quote! {
-                use serde::{Deserialize, Serialize};
-                use ovsdb::protocol;
-                use ovsdb_client::Entity;
-                #model
-            };
-
-            let parsed: syn::File = syn::parse2(tokens)?;
-            output_file.write_all(prettyplease::unparse(&parsed).as_bytes())?;
+            let entity = Entity::from_table(table);
+            entity.to_file(&filename)?;
 
             mod_file.write_all(
                 format!(
-                    "mod {};\npub use {}::*;\n",
-                    table.name.to_case(Case::Snake),
-                    table.name.to_case(Case::Snake)
+                    "mod {table_name};\npub use {table_name}::*;\n",
+                    table_name = &table.name.to_case(Case::Snake)
                 )
                 .as_bytes(),
             )?;
@@ -90,7 +86,7 @@ impl Builder {
 
         output_dir.push(module);
 
-        self.generate_models(&schema, &output_dir).unwrap();
+        self.generate_modules(&schema, &output_dir).unwrap();
     }
 }
 

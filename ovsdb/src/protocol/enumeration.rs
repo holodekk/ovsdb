@@ -8,7 +8,7 @@ use super::Set;
 
 pub fn serialize<T, S>(v: &T, serializer: S) -> Result<S::Ok, S::Error>
 where
-    T: Default + Serialize + PartialEq,
+    T: Serialize + PartialEq,
     S: Serializer,
 {
     if v == &T::default() {
@@ -21,7 +21,7 @@ where
 pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
-    T: Default + DeserializeOwned,
+    T: DeserializeOwned,
 {
     let value = serde_json::Value::deserialize(deserializer)?;
 

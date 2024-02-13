@@ -7,15 +7,12 @@ use serde::{
     Deserialize, Serialize,
 };
 
-#[derive(Debug)]
-pub struct Set<T>(pub Vec<T>)
-where
-    T: Serialize;
+use super::Uuid;
 
-impl<T> Deref for Set<T>
-where
-    T: Serialize,
-{
+#[derive(Clone, Debug, PartialEq)]
+pub struct Set<T>(pub Vec<T>);
+
+impl<T> Deref for Set<T> {
     type Target = Vec<T>;
 
     fn deref(&self) -> &Self::Target {
@@ -38,120 +35,146 @@ where
     }
 }
 
-struct UuidSetVisitor;
-impl<'de> Visitor<'de> for UuidSetVisitor {
-    type Value = Set<super::Uuid>;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("`array`")
-    }
-
-    fn visit_seq<S>(self, mut value: S) -> Result<Self::Value, S::Error>
-    where
-        S: SeqAccess<'de>,
-    {
-        let kind: String = value.next_element()?.unwrap();
-        match kind.as_str() {
-            "set" => {
-                let set: Vec<super::Uuid> = value.next_element()?.unwrap();
-                Ok(Set(set))
-            }
-            "uuid" => {
-                let s: String = value.next_element()?.unwrap();
-                let uuid = ::uuid::Uuid::parse_str(&s).map_err(de::Error::custom)?;
-                let set: Self::Value = Set(vec![super::Uuid::from(uuid)]);
-                Ok(set)
-            }
-            _ => Err(de::Error::invalid_value(de::Unexpected::Str(&kind), &"set")),
-        }
-    }
-}
-
-struct SetVisitor<T>
+impl<'de, T> From<Vec<T>> for Set<T>
 where
-    T: Serialize,
+    T: Serialize + Deserialize<'de>,
 {
-    marker: PhantomData<fn() -> Set<T>>,
+    fn from(value: Vec<T>) -> Self {
+        Self(value)
+    }
 }
 
-impl<T> SetVisitor<T>
+impl<'de, T> From<Set<T>> for Vec<T>
 where
-    T: Serialize,
+    T: Serialize + Deserialize<'de>,
 {
-    fn new() -> Self {
-        SetVisitor {
-            marker: PhantomData,
-        }
+    fn from(value: Set<T>) -> Self {
+        value.0
     }
 }
 
-impl<'de, T> Visitor<'de> for SetVisitor<T>
+impl<'de, T> Deserialize<'de> for Set<T>
 where
-    T: Deserialize<'de> + Serialize,
+    T: Deserialize<'de>,
 {
-    type Value = Set<T>;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("`array`")
-    }
-
-    fn visit_seq<S>(self, mut value: S) -> Result<Self::Value, S::Error>
-    where
-        S: SeqAccess<'de>,
-    {
-        let kind: String = value.next_element()?.unwrap();
-        match kind.as_str() {
-            "set" => {
-                let set: Vec<T> = value.next_element()?.unwrap();
-                Ok(Set(set))
-            }
-            _ => Err(de::Error::invalid_value(de::Unexpected::Str(&kind), &"set")),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for Set<super::Uuid> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
+        struct SetVisitor<T> {
+            marker: PhantomData<fn() -> Set<T>>,
+        }
+
+        impl<T> SetVisitor<T> {
+            fn new() -> Self {
+                SetVisitor {
+                    marker: PhantomData,
+                }
+            }
+        }
+
+        impl<'de, T> Visitor<'de> for SetVisitor<T>
+        where
+            T: Deserialize<'de>,
+        {
+            type Value = Set<T>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("`array`")
+            }
+
+            fn visit_seq<S>(self, mut value: S) -> Result<Self::Value, S::Error>
+            where
+                S: SeqAccess<'de>,
+            {
+                let kind: String = value.next_element()?.unwrap();
+                match kind.as_str() {
+                    "set" => {
+                        let set: Vec<T> = value.next_element()?.unwrap();
+                        Ok(Set(set))
+                    }
+                    _ => Err(de::Error::invalid_value(de::Unexpected::Str(&kind), &"set")),
+                }
+            }
+        }
+
+        deserializer.deserialize_seq(SetVisitor::new())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct UuidSet(pub Vec<Uuid>);
+
+impl Deref for UuidSet {
+    type Target = Vec<Uuid>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Serialize for UuidSet {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(2))?;
+        seq.serialize_element("set")?;
+        seq.serialize_element(&self.0)?;
+        seq.end()
+    }
+}
+
+impl From<Vec<Uuid>> for UuidSet {
+    fn from(value: Vec<Uuid>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<UuidSet> for Vec<Uuid> {
+    fn from(value: UuidSet) -> Self {
+        value.0
+    }
+}
+
+impl<'de> Deserialize<'de> for UuidSet {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct UuidSetVisitor;
+
+        impl<'de> Visitor<'de> for UuidSetVisitor {
+            type Value = UuidSet;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("`array`")
+            }
+
+            fn visit_seq<S>(self, mut value: S) -> Result<Self::Value, S::Error>
+            where
+                S: SeqAccess<'de>,
+            {
+                let kind: String = value.next_element()?.unwrap();
+                match kind.as_str() {
+                    "set" => {
+                        let set: Vec<Uuid> = value.next_element()?.unwrap();
+                        Ok(UuidSet(set))
+                    }
+                    "uuid" => {
+                        let s: String = value.next_element()?.unwrap();
+                        let uuid = ::uuid::Uuid::parse_str(&s).map_err(de::Error::custom)?;
+                        Ok(UuidSet(vec![Uuid::from(uuid)]))
+                    }
+                    _ => Err(de::Error::invalid_value(
+                        de::Unexpected::Str(&kind),
+                        &"set or uuid",
+                    )),
+                }
+            }
+        }
+
         deserializer.deserialize_seq(UuidSetVisitor)
-    }
-}
-
-impl<'de> Deserialize<'de> for Set<String> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_seq(SetVisitor::new())
-    }
-}
-
-impl<'de> Deserialize<'de> for Set<i32> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_seq(SetVisitor::new())
-    }
-}
-
-impl<'de> Deserialize<'de> for Set<i64> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_seq(SetVisitor::new())
-    }
-}
-
-impl<'de> Deserialize<'de> for Set<f64> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_seq(SetVisitor::new())
     }
 }
 

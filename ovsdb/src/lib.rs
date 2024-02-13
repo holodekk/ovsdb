@@ -1,34 +1,10 @@
+mod macros;
+pub use macros::*;
 pub mod protocol;
+mod result;
+pub use result::*;
 pub mod schema;
 
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("Unknown Error")]
-    Unknown,
-    #[error("Not Connected")]
-    NotConnected,
-    #[error("Unexpected IO Error")]
-    Io(#[from] std::io::Error),
-    #[error("Serialization/deserialization Error")]
-    Serde(#[from] serde_json::Error),
-    // #[error("Internal synchronization error")]
-    // Synchronization(#[from] mpsc::error::SendError<ClientRequest>),
-    // #[error("Internal synchronization error")]
-    // InternalSync(#[from] mpsc::error::SendError<ClientCommand>),
-    #[error("Shutdown error")]
-    Shutdown(#[from] tokio::task::JoinError),
-    #[error("Tokio receive")]
-    TokioReceive(#[from] tokio::sync::oneshot::error::RecvError),
-    // #[error("Protocol error")]
-    // Codec(#[from] protocol::codec::Error),
-}
-
-#[macro_export]
-macro_rules! include_schema {
-    ($schema: tt) => {
-        include!(concat!(
-            env!("OUT_DIR"),
-            concat!("/", $schema, "/", "mod.rs")
-        ));
-    };
+pub trait Entity {
+    fn table_name() -> &'static str;
 }

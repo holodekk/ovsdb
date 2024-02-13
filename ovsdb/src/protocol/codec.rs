@@ -3,11 +3,25 @@ use tokio_util::{
     codec::{Decoder, Encoder},
 };
 
+// use crate::Error;
+
 use super::Message;
 
-pub enum BufferTag {
+enum BufferTag {
     Obj,
     Str,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum CodecError {
+    #[error("Error encoding data")]
+    Encode(#[source] serde_json::Error),
+    #[error("Error decoding data")]
+    Decode(#[source] serde_json::Error),
+    #[error("Corrupted data stream: {0}")]
+    DataStreamCorrupted(String),
+    #[error("Unexpected IO Error")]
+    Io(#[from] std::io::Error),
 }
 
 #[derive(Default)]
@@ -21,10 +35,7 @@ impl Codec {
         Self::default()
     }
 
-    fn try_decode_message(
-        &mut self,
-        src: &[u8],
-    ) -> Result<(Option<Message>, usize), serde_json::Error> {
+    fn try_decode_message(&mut self, src: &[u8]) -> Result<(Option<Message>, usize), CodecError> {
         let mut offset = 0;
 
         while offset < src.len() {
@@ -58,7 +69,8 @@ impl Codec {
                                         "Received: {}",
                                         String::from_utf8(self.data.clone()).unwrap()
                                     );
-                                    let msg: Message = serde_json::from_slice(&self.data.to_vec())?;
+                                    let msg: Message = serde_json::from_slice(&self.data.to_vec())
+                                        .map_err(CodecError::Decode)?;
                                     self.data.clear();
                                     return Ok((Some(msg), offset));
                                 }
@@ -74,7 +86,9 @@ impl Codec {
                         offset += n + 1;
                         self.tags.push(BufferTag::Obj);
                     } else {
-                        panic!("Datastream corrupted.  No openening tag.");
+                        return Err(CodecError::DataStreamCorrupted(
+                            "No openening tag found in data stream.".to_string(),
+                        ));
                     }
                 }
             }
@@ -87,7 +101,7 @@ impl Codec {
 
 impl Decoder for Codec {
     type Item = Message;
-    type Error = crate::Error;
+    type Error = CodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let (res, consume) = self.try_decode_message(src.chunk())?;
@@ -97,10 +111,10 @@ impl Decoder for Codec {
 }
 
 impl Encoder<Message> for Codec {
-    type Error = crate::Error;
+    type Error = CodecError;
 
     fn encode(&mut self, item: Message, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let data = serde_json::to_vec(&item)?;
+        let data = serde_json::to_vec(&item).map_err(CodecError::Encode)?;
         dst.reserve(data.len());
         dst.put_slice(&data);
         println!("Sent: {}", String::from_utf8(dst.clone().to_vec()).unwrap());

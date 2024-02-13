@@ -8,7 +8,7 @@ use serde::{
     Deserialize, Serialize,
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Map<K, V>(BTreeMap<K, V>)
 where
     K: Serialize,
@@ -23,6 +23,26 @@ where
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl<'de, K, V> From<BTreeMap<K, V>> for Map<K, V>
+where
+    K: Deserialize<'de> + Serialize,
+    V: Deserialize<'de> + Serialize,
+{
+    fn from(value: BTreeMap<K, V>) -> Self {
+        Map(value)
+    }
+}
+
+impl<'de, K, V> From<Map<K, V>> for BTreeMap<K, V>
+where
+    K: Deserialize<'de> + Serialize,
+    V: Deserialize<'de> + Serialize,
+{
+    fn from(value: Map<K, V>) -> Self {
+        value.0
     }
 }
 
