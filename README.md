@@ -8,7 +8,7 @@ A Rust implementation of the [OVSDB][1] schema and wire format.
 
 ## What is OVSDB?
 
-OVSDB is the database protocol behind Open vSwitch[2] and OVN[3], documented in
+OVSDB is the database protocol behind [Open vSwitch][2] and [OVN][3], documented in
 [RFC 7047][4].
 
 ## License
