@@ -1,0 +1,57 @@
+image:
+  name: gitlab-registry.dubzland.net/holodekk/rust-docker-ci:latest
+
+stages:
+  - test
+  - lint
+  - build
+
+cache: &global_cache
+  key:
+    files:
+      - Cargo.lock
+  paths:
+    - .cargo/.crates.toml
+    - .cargo/.crates2.json
+    - .cargo/bin/
+    - .cargo/registry/index/
+    - .cargo/registry/cache/
+    - .cargo/git/db/
+    - target/debug/deps
+    - target/debug/build
+  policy: pull-push
+
+variables:
+  CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  DOCKER_TLS_CERTDIR: "/certs"
+
+test:
+  stage: test
+  before_script:
+    - rustc --version
+    - cargo --version
+  script:
+    - cargo test --verbose
+
+clippy:
+  stage: lint
+  cache:
+    <<: *global_cache
+    policy: pull
+  before_script:
+    - rustc --version
+    - cargo --version
+    - protoc --version
+  script:
+    - cargo clippy --verbose
+
+build:
+  stage: build
+  cache:
+    <<: *global_cache
+    policy: pull
+  before_script:
+    - rustc --version
+    - cargo --version
+  script:
+    - cargo build
