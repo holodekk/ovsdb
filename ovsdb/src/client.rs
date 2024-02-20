@@ -6,7 +6,7 @@ use futures::{stream::StreamExt, SinkExt};
 use serde::de::DeserializeOwned;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::UnixStream,
+    net::{TcpStream, UnixStream},
     sync::{
         mpsc::{self, error::SendError},
         oneshot::{self, error::RecvError},
@@ -137,6 +137,27 @@ impl Client {
             { tokio::spawn(async move { client_main(requests_rx, commands_rx, stream).await }) };
 
         Ok(Client::new(requests_tx, commands_tx, handle))
+    }
+
+    /// Connect to an OVSDB server via TCP socket.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use ovsdb::client::Client;
+    ///
+    /// let client = Client::connect_tcp("127.0.0.1:6641")
+    ///     .await
+    ///     .unwrap();
+    /// ```
+    pub async fn connect_tcp<T>(server_addr: T) -> Result<Self, ClientError>
+    where
+        T: AsRef<str> + tokio::net::ToSocketAddrs,
+    {
+        let stream = TcpStream::connect(server_addr)
+            .await
+            .map_err(ClientError::ConnectionFailed)?;
+        Client::start(stream).await
     }
 
     /// Connect to an OVSDB server via UNIX domain socket.

@@ -194,14 +194,14 @@
 )]
 #![deny(unsafe_code)]
 
+mod macros;
+mod result;
+
 #[cfg(feature = "client")]
 pub mod client;
-
+pub mod protocol;
 pub mod schema;
 
-mod macros;
-pub mod protocol;
-mod result;
 pub use result::*;
 
 /// An entity that can be retrieved from OVSDB.

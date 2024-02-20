@@ -152,6 +152,7 @@ Congratulations. You've just had your first Rust conversation with OVSDB. For fu
 
 As this crate is heavily WIP, contributions are extremely welcome. Check out
 the [contributing guide][guide] to get involved.
+
 [guide]: CONTRIBUTING.md
 
 ## License
