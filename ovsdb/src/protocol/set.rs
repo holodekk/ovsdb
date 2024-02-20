@@ -9,6 +9,7 @@ use serde::{
 
 use super::Uuid;
 
+/// An OVSDB list of values.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Set<T>(pub Vec<T>);
 
@@ -79,7 +80,7 @@ where
         {
             type Value = Set<T>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 formatter.write_str("`array`")
             }
 
@@ -87,10 +88,10 @@ where
             where
                 S: SeqAccess<'de>,
             {
-                let kind: String = value.next_element()?.unwrap();
+                let kind: String = value.next_element()?.expect("set key");
                 match kind.as_str() {
                     "set" => {
-                        let set: Vec<T> = value.next_element()?.unwrap();
+                        let set: Vec<T> = value.next_element()?.expect("set value");
                         Ok(Set(set))
                     }
                     _ => Err(de::Error::invalid_value(de::Unexpected::Str(&kind), &"set")),
@@ -102,8 +103,9 @@ where
     }
 }
 
+/// An OVSDB `set` of UUID values.
 #[derive(Clone, Debug, PartialEq)]
-pub struct UuidSet(pub Vec<Uuid>);
+pub struct UuidSet(Vec<Uuid>);
 
 impl Deref for UuidSet {
     type Target = Vec<Uuid>;
@@ -147,7 +149,7 @@ impl<'de> Deserialize<'de> for UuidSet {
         impl<'de> Visitor<'de> for UuidSetVisitor {
             type Value = UuidSet;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 formatter.write_str("`array`")
             }
 
@@ -155,14 +157,14 @@ impl<'de> Deserialize<'de> for UuidSet {
             where
                 S: SeqAccess<'de>,
             {
-                let kind: String = value.next_element()?.unwrap();
+                let kind: String = value.next_element()?.expect("uuidset key");
                 match kind.as_str() {
                     "set" => {
-                        let set: Vec<Uuid> = value.next_element()?.unwrap();
+                        let set: Vec<Uuid> = value.next_element()?.expect("uuidset value");
                         Ok(UuidSet(set))
                     }
                     "uuid" => {
-                        let s: String = value.next_element()?.unwrap();
+                        let s: String = value.next_element()?.expect("uuidset uuid value");
                         let uuid = ::uuid::Uuid::parse_str(&s).map_err(de::Error::custom)?;
                         Ok(UuidSet(vec![Uuid::from(uuid)]))
                     }
@@ -200,9 +202,9 @@ mod tests {
     #[test]
     fn test_deserialize() -> Result<(), serde_json::Error> {
         let data = r#"{"bar": ["set",["red","blue"]]}"#;
-        let foo: Foo = serde_json::from_str(&data)?;
-        assert_eq!(foo.bar.first().unwrap(), &"red".to_string());
-        assert_eq!(foo.bar.last().unwrap(), &"blue".to_string());
+        let foo: Foo = serde_json::from_str(data)?;
+        assert_eq!(foo.bar.first().expect("first value"), &"red".to_string());
+        assert_eq!(foo.bar.last().expect("last value"), &"blue".to_string());
         Ok(())
     }
 }

@@ -1,16 +1,17 @@
+//! OVSDB wire protocol implementation
+
 mod codec;
 pub use codec::{Codec, CodecError};
-
 mod request;
 pub use request::*;
 mod response;
 pub use response::*;
 
-// pub mod enumeration;
 mod map;
 pub use map::*;
 mod message;
 pub use message::Message;
+pub mod method;
 mod optional;
 pub use optional::Optional;
 mod set;
@@ -18,6 +19,7 @@ pub use set::*;
 mod uuid;
 pub use self::uuid::*;
 
+#[allow(dead_code)]
 #[cfg(test)]
 mod tests {
     use crate::protocol;
@@ -27,7 +29,7 @@ mod tests {
     fn test_parse() {
         #[derive(Deserialize, PartialEq)]
         #[serde(rename_all = "snake_case")]
-        pub enum TestFailMode {
+        enum TestFailMode {
             Secure,
             Standalone,
             None,
@@ -39,7 +41,7 @@ mod tests {
         }
         #[derive(Clone, Deserialize, PartialEq)]
         #[serde(rename_all = "snake_case")]
-        pub enum TestProtocols {
+        enum TestProtocols {
             OpenFlow10,
             OpenFlow11,
             OpenFlow12,
@@ -49,29 +51,29 @@ mod tests {
             None,
         }
         #[derive(Deserialize)]
-        pub struct TestBridge {
-            pub auto_attach: protocol::Set<protocol::Uuid>,
-            pub controller: protocol::Set<protocol::Uuid>,
-            pub datapath_id: protocol::Optional<String>,
-            pub datapath_type: String,
-            pub datapath_version: String,
-            pub external_ids: protocol::Map<String, String>,
-            pub fail_mode: protocol::Optional<TestFailMode>,
-            pub flood_vlans: protocol::Set<i64>,
-            pub flow_tables: protocol::Map<i64, protocol::Uuid>,
-            pub ipfix: protocol::Set<protocol::Uuid>,
-            pub mcast_snooping_enable: bool,
-            pub mirrors: protocol::Set<protocol::Uuid>,
-            pub name: String,
-            pub netflow: protocol::Set<protocol::Uuid>,
-            pub other_config: protocol::Map<String, String>,
-            pub ports: protocol::Set<protocol::Uuid>,
-            pub protocols: protocol::Set<TestProtocols>,
-            pub rstp_enable: bool,
-            pub rstp_status: protocol::Map<String, String>,
-            pub sflow: protocol::Set<protocol::Uuid>,
-            pub status: protocol::Map<String, String>,
-            pub stp_enable: bool,
+        struct TestBridge {
+            auto_attach: protocol::Set<protocol::Uuid>,
+            controller: protocol::Set<protocol::Uuid>,
+            datapath_id: protocol::Optional<String>,
+            datapath_type: String,
+            datapath_version: String,
+            external_ids: protocol::Map<String, String>,
+            fail_mode: protocol::Optional<TestFailMode>,
+            flood_vlans: protocol::Set<i64>,
+            flow_tables: protocol::Map<i64, protocol::Uuid>,
+            ipfix: protocol::Set<protocol::Uuid>,
+            mcast_snooping_enable: bool,
+            mirrors: protocol::Set<protocol::Uuid>,
+            name: String,
+            netflow: protocol::Set<protocol::Uuid>,
+            other_config: protocol::Map<String, String>,
+            ports: protocol::Set<protocol::Uuid>,
+            protocols: protocol::Set<TestProtocols>,
+            rstp_enable: bool,
+            rstp_status: protocol::Map<String, String>,
+            sflow: protocol::Set<protocol::Uuid>,
+            status: protocol::Map<String, String>,
+            stp_enable: bool,
         }
         let data = r#"{
     "rstp_status":["map",[]],
@@ -108,6 +110,6 @@ mod tests {
     "rstp_enable":false,
     "status":["map",[]]
 }"#;
-        let _test_bridge: TestBridge = serde_json::from_str(&data).unwrap();
+        let _test_bridge: TestBridge = serde_json::from_str(data).expect("TestBridge struct");
     }
 }

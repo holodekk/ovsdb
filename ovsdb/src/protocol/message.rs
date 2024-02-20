@@ -7,9 +7,12 @@ use serde::{
     Deserialize, Serialize,
 };
 
+/// A single wire-protocol message exchanged between OVSDB client and server.
 #[derive(Debug)]
 pub enum Message {
+    /// A single request message.
     Request(Request),
+    /// A single response message.
     Response(Response),
 }
 
@@ -47,7 +50,7 @@ impl<'de> Deserialize<'de> for Message {
         impl<'de> Visitor<'de> for MessageVisitor {
             type Value = Message;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 formatter.write_str("`object`")
             }
 

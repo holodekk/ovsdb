@@ -7,14 +7,27 @@ documentation = "https://docs.rs/ovsdb/0.0.1"
 edition = "2021"
 homepage = "https://git.dubzland.com/holodekk/ovsdb"
 authors = ["Josh Williams <jdubz@holodekk.io>"]
-categories = ["ovsdb", "sdn", "network-programming", "database-interfaces"]
+categories = ["network-programming", "database-interfaces"]
 version = "0.0.1"
 repository = "https://git.dubzland.com/holodekk/ovsdb.git"
 license = "MIT"
 
 [dependencies]
-serde = { version = "1.0.189", features = ["derive"] }
+erased-serde = "0.4.3"
+futures = "0.3"
+serde = { version = "1.0.189", features = ["derive", "rc"] }
 serde_json = "1.0.107"
 thiserror = "1.0.50"
+tokio = { version = "1", features = [
+  "io-util",
+  "macros",
+  "net",
+  "rt",
+  "rt-multi-thread",
+  "sync",
+] }
 tokio-util = { version = "0.7.4", features = ["codec"] }
 uuid = { version = "1.5.0", features = ["v4", "serde"] }
+
+[features]
+client = []

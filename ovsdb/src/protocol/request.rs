@@ -4,27 +4,48 @@ use serde::{
     Deserialize, Serialize, Serializer,
 };
 
-use super::Uuid;
+use crate::protocol::method::{EchoParams, GetSchemaParams, TransactParams};
 
-mod method;
-pub use method::*;
-mod params;
-pub use params::*;
+use super::{
+    method::{Method, Params},
+    Uuid,
+};
 
+/// Wire-format representation of an OVSDB method call.
 #[derive(Debug)]
 pub struct Request {
-    pub id: Option<super::Uuid>,
-    pub method: Method,
-    pub params: Params,
+    id: Option<super::Uuid>,
+    method: Method,
+    params: Option<Box<dyn Params>>,
 }
 
 impl Request {
-    pub fn new(method: Method, params: Params) -> Self {
+    /// Creates a new OVSDB request.
+    #[must_use]
+    pub fn new(method: Method, params: Option<Box<dyn Params>>) -> Self {
         Self {
             id: Some(super::Uuid::from(uuid::Uuid::new_v4())),
             method,
             params,
         }
+    }
+
+    /// Free-form id used for matching requests to responses
+    #[must_use]
+    pub fn id(&self) -> Option<&super::Uuid> {
+        self.id.as_ref()
+    }
+
+    /// Actual OVSDB method being executed
+    #[must_use]
+    pub fn method(&self) -> Method {
+        self.method
+    }
+
+    /// Parameters associated with this method call
+    #[must_use]
+    pub fn params(&self) -> Option<&dyn Params> {
+        self.params.as_deref()
     }
 }
 
@@ -36,7 +57,10 @@ impl Serialize for Request {
         let mut map = serializer.serialize_map(Some(3))?;
         map.serialize_entry("id", &self.id)?;
         map.serialize_entry("method", &self.method)?;
-        map.serialize_entry("params", &self.params)?;
+        match &self.params {
+            Some(p) => map.serialize_entry("params", p)?,
+            None => map.serialize_entry("params", &Vec::<i32>::new())?,
+        }
         map.end()
     }
 }
@@ -51,7 +75,7 @@ impl<'de> Deserialize<'de> for Request {
         impl<'de> Visitor<'de> for RequestVisitor {
             type Value = Request;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 formatter.write_str("`map`")
             }
 
@@ -69,7 +93,7 @@ impl<'de> Deserialize<'de> for Request {
                             id = Some(Uuid::from(u));
                         }
                         "method" => {
-                            let m = super::Method::try_from(k).map_err(de::Error::custom)?;
+                            let m = Method::try_from(k).map_err(de::Error::custom)?;
                             method = Some(m);
                         }
                         "params" => params = Some(v),
@@ -82,23 +106,25 @@ impl<'de> Deserialize<'de> for Request {
 
                 match method {
                     Some(m) => {
-                        let params = match m {
+                        let params: Option<Box<dyn Params>> = match m {
                             Method::Echo => {
                                 let v = params.ok_or("params").map_err(de::Error::missing_field)?;
-                                Params::Echo(serde_json::from_value(v).map_err(de::Error::custom)?)
+                                let p: EchoParams =
+                                    serde_json::from_value(v).map_err(de::Error::custom)?;
+                                Some(Box::new(p))
                             }
-                            Method::ListDatabases => Params::ListDatabases,
+                            Method::ListDatabases => None,
                             Method::GetSchema => {
                                 let v = params.ok_or("params").map_err(de::Error::missing_field)?;
-                                Params::GetSchema(
-                                    serde_json::from_value(v).map_err(de::Error::custom)?,
-                                )
+                                let p: GetSchemaParams =
+                                    serde_json::from_value(v).map_err(de::Error::custom)?;
+                                Some(Box::new(p))
                             }
                             Method::Transact => {
                                 let v = params.ok_or("params").map_err(de::Error::missing_field)?;
-                                Params::Transact(
-                                    serde_json::from_value(v).map_err(de::Error::custom)?,
-                                )
+                                let p: TransactParams =
+                                    serde_json::from_value(v).map_err(de::Error::custom)?;
+                                Some(Box::new(p))
                             }
                         };
                         Ok(Request {

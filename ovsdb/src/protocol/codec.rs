@@ -3,34 +3,43 @@ use tokio_util::{
     codec::{Decoder, Encoder},
 };
 
-// use crate::Error;
-
 use super::Message;
 
+#[derive(Debug)]
 enum BufferTag {
     Obj,
     Str,
 }
 
+/// The error type for parsing errors encountered by the [Codec].
 #[derive(thiserror::Error, Debug)]
 pub enum CodecError {
+    /// JSON error converting a native struct to wire-protocol.
     #[error("Error encoding data")]
     Encode(#[source] serde_json::Error),
+    /// JSON error converting wire-protocol to native struct.
     #[error("Error decoding data")]
     Decode(#[source] serde_json::Error),
+    /// Garbled data stream (usually indicates a missing opening brace).
     #[error("Corrupted data stream: {0}")]
     DataStreamCorrupted(String),
+    /// Low-level IO error.
     #[error("Unexpected IO Error")]
     Io(#[from] std::io::Error),
 }
 
-#[derive(Default)]
+/// An OVSDB protocol encoder/decoder.
+///
+/// The codec is responsible for converting native objects to wire protocol, and vice versa,
+/// primarily using `serde` and `serde_json`.
+#[derive(Default, Debug)]
 pub struct Codec {
     data: Vec<u8>,
     tags: Vec<BufferTag>,
 }
 
 impl Codec {
+    /// Instantiate a new Codec.
     pub fn new() -> Self {
         Self::default()
     }
@@ -67,7 +76,8 @@ impl Codec {
                                     self.data.extend_from_slice(src);
                                     println!(
                                         "Received: {}",
-                                        String::from_utf8(self.data.clone()).unwrap()
+                                        String::from_utf8(self.data.clone())
+                                            .expect("utf8 conversion")
                                     );
                                     let msg: Message = serde_json::from_slice(&self.data.to_vec())
                                         .map_err(CodecError::Decode)?;
@@ -117,7 +127,10 @@ impl Encoder<Message> for Codec {
         let data = serde_json::to_vec(&item).map_err(CodecError::Encode)?;
         dst.reserve(data.len());
         dst.put_slice(&data);
-        println!("Sent: {}", String::from_utf8(dst.clone().to_vec()).unwrap());
+        println!(
+            "Sent: {}",
+            String::from_utf8(dst.clone().to_vec()).expect("message encode")
+        );
         Ok(())
     }
 }

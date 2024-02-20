@@ -7,8 +7,15 @@ use serde::{
     Deserialize, Serialize,
 };
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+/// A unique identifier, usually representing a single entity in OVSDB.
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub struct Uuid(_Uuid);
+
+impl Default for Uuid {
+    fn default() -> Self {
+        Self::from(_Uuid::new_v4())
+    }
+}
 
 impl From<_Uuid> for Uuid {
     fn from(value: _Uuid) -> Self {
@@ -46,7 +53,7 @@ impl<'de> Deserialize<'de> for Uuid {
         impl<'de> Visitor<'de> for UuidVisitor {
             type Value = Uuid;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 formatter.write_str("`array`")
             }
 
@@ -57,7 +64,7 @@ impl<'de> Deserialize<'de> for Uuid {
                 match value.next_element::<String>()? {
                     Some(kind) => match kind.as_str() {
                         "uuid" => {
-                            let s: String = value.next_element()?.unwrap();
+                            let s: String = value.next_element()?.expect("uuid value");
                             let uuid = _Uuid::parse_str(&s).map_err(de::Error::custom)?;
                             Ok(Uuid(uuid))
                         }
@@ -84,7 +91,7 @@ mod tests {
     #[test]
     fn test_serialize() -> Result<(), serde_json::Error> {
         let expected = r#"["uuid","36bef046-7da7-43a5-905a-c17899216fcb"]"#;
-        let uuid = uuid::Uuid::parse_str("36bef046-7da7-43a5-905a-c17899216fcb").unwrap();
+        let uuid = uuid::Uuid::parse_str("36bef046-7da7-43a5-905a-c17899216fcb").expect("uuid");
         let value = Uuid(uuid);
         let json = serde_json::to_string(&value)?;
         assert_eq!(json, expected);

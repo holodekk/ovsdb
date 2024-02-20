@@ -1,5 +1,5 @@
 [workspace]
-members = ["ovsdb", "ovsdb-build", "ovsdb-client"]
+members = ["ovsdb", "ovsdb-build"]
 
 [workspace.dependencies]
-ovsdb = { path = "./ovsdb" }
+ovsdb = { path = "./ovsdb", features = ["client", "schema"] }

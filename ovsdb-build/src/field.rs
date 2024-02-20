@@ -26,7 +26,7 @@ pub(crate) enum Kind {
 }
 
 impl Kind {
-    pub fn to_native_type(&self) -> syn::Type {
+    pub(crate) fn to_native_type(&self) -> syn::Type {
         match self {
             Self::Atomic(a) => {
                 let kind = atomic_to_native_type(a);
@@ -52,7 +52,7 @@ impl Kind {
         }
     }
 
-    pub fn to_ovsdb_type(&self) -> syn::Type {
+    pub(crate) fn to_ovsdb_type(&self) -> syn::Type {
         match self {
             Self::Atomic(a) => {
                 let kind = atomic_to_native_type(a);
@@ -82,25 +82,30 @@ impl Kind {
         }
     }
 
-    pub fn from_column(column: &Column) -> Self {
-        let mut field_kind = Self::Atomic(column.kind.key.kind.clone());
+    pub(crate) fn from_column(column: &Column) -> Self {
+        let mut field_kind = Self::Atomic(column.kind().key().kind());
 
-        if column.kind.is_enum() {
+        if column.kind().is_enum() {
             field_kind = Self::Enum(
-                super::str_to_name(&column.name),
-                column.kind.key.kind.clone(),
+                super::str_to_name(column.name()),
+                column.kind().key().kind(),
             );
         }
 
-        if !column.kind.is_scalar() {
-            if column.kind.is_optional() {
+        if !column.kind().is_scalar() {
+            if column.kind().is_optional() {
                 field_kind = Self::Optional(Box::new(field_kind));
-            } else if column.kind.is_set() {
+            } else if column.kind().is_set() {
                 field_kind = Self::Set(Box::new(field_kind));
-            } else if column.kind.is_map() {
-                let key_kind = &column.kind.key.kind;
-                let value_kind = &column.kind.value.as_ref().unwrap().kind;
-                field_kind = Self::Map(key_kind.clone(), value_kind.clone());
+            } else if column.kind().is_map() {
+                let key_kind = &column.kind().key().kind();
+                let value_kind = &column
+                    .kind()
+                    .value()
+                    .as_ref()
+                    .expect("column value kind")
+                    .kind();
+                field_kind = Self::Map(*key_kind, *value_kind);
             }
         }
 
@@ -111,12 +116,13 @@ impl Kind {
 #[derive(Debug)]
 pub(crate) struct Field {
     ident: syn::Ident,
+    kind: Kind,
     ty: syn::Type,
     attributes: Attributes,
 }
 
 impl Field {
-    pub fn new<T>(name: T, ty: syn::Type) -> Self
+    fn new<T>(name: T, kind: Kind, ty: syn::Type) -> Self
     where
         T: AsRef<str>,
     {
@@ -131,21 +137,45 @@ impl Field {
 
         Self {
             ident,
+            kind,
             ty,
             attributes,
         }
     }
 
-    pub fn ident(&self) -> &syn::Ident {
+    pub(crate) fn native<T>(name: T, kind: &Kind) -> Self
+    where
+        T: AsRef<str>,
+    {
+        Self::new(name, kind.clone(), kind.to_native_type())
+    }
+
+    pub(crate) fn ovsdb<T>(name: T, kind: &Kind) -> Self
+    where
+        T: AsRef<str>,
+    {
+        Self::new(name, kind.clone(), kind.to_ovsdb_type())
+    }
+
+    /// Returns a reference to the ident of this [`Field`].
+    pub(crate) fn ident(&self) -> &syn::Ident {
         &self.ident
     }
 
-    fn ty(&self) -> &syn::Type {
+    pub(crate) fn kind(&self) -> &Kind {
+        &self.kind
+    }
+
+    pub(crate) fn ty(&self) -> &syn::Type {
         &self.ty
     }
 
     fn attributes(&self) -> &Attributes {
         &self.attributes
+    }
+
+    pub(crate) fn is_atomic(&self) -> bool {
+        matches!(self.kind(), Kind::Atomic(_))
     }
 }
 
@@ -172,14 +202,14 @@ mod tests {
         let mut buffer = Vec::new();
         buffer
             .write_all(prettyplease::unparse(&f).as_bytes())
-            .unwrap();
-        String::from_utf8(buffer).unwrap()
+            .expect("parsed");
+        String::from_utf8(buffer).expect("utf8 string")
     }
 
     #[test]
     fn test_field_boolean() {
-        let native_field = Field::new("test", Kind::Atomic(Atomic::Boolean).to_native_type());
-        let ovsdb_field = Field::new("test", Kind::Atomic(Atomic::Boolean).to_ovsdb_type());
+        let native_field = Field::native("test", &Kind::Atomic(Atomic::Boolean));
+        let ovsdb_field = Field::ovsdb("test", &Kind::Atomic(Atomic::Boolean));
         let expected = "struct Test {\n    test: bool,\n}\n";
 
         assert_eq!(&test_struct(&native_field), expected);
@@ -188,8 +218,8 @@ mod tests {
 
     #[test]
     fn test_field_integer() {
-        let native_field = Field::new("test", Kind::Atomic(Atomic::Integer).to_native_type());
-        let ovsdb_field = Field::new("test", Kind::Atomic(Atomic::Integer).to_ovsdb_type());
+        let native_field = Field::native("test", &Kind::Atomic(Atomic::Integer));
+        let ovsdb_field = Field::ovsdb("test", &Kind::Atomic(Atomic::Integer));
         let expected = "struct Test {\n    test: i64,\n}\n";
 
         assert_eq!(&test_struct(&native_field), expected);
@@ -198,8 +228,8 @@ mod tests {
 
     #[test]
     fn test_field_real() {
-        let native_field = Field::new("test", Kind::Atomic(Atomic::Real).to_native_type());
-        let ovsdb_field = Field::new("test", Kind::Atomic(Atomic::Real).to_ovsdb_type());
+        let native_field = Field::native("test", &Kind::Atomic(Atomic::Real));
+        let ovsdb_field = Field::ovsdb("test", &Kind::Atomic(Atomic::Real));
         let expected = "struct Test {\n    test: f64,\n}\n";
 
         assert_eq!(&test_struct(&native_field), expected);
@@ -208,8 +238,8 @@ mod tests {
 
     #[test]
     fn test_field_string() {
-        let native_field = Field::new("test", Kind::Atomic(Atomic::String).to_native_type());
-        let ovsdb_field = Field::new("test", Kind::Atomic(Atomic::String).to_ovsdb_type());
+        let native_field = Field::native("test", &Kind::Atomic(Atomic::String));
+        let ovsdb_field = Field::ovsdb("test", &Kind::Atomic(Atomic::String));
         let expected = "struct Test {\n    test: String,\n}\n";
 
         assert_eq!(&test_struct(&native_field), expected);
@@ -218,8 +248,8 @@ mod tests {
 
     #[test]
     fn test_field_uuid() {
-        let native_field = Field::new("test", Kind::Atomic(Atomic::Uuid).to_native_type());
-        let ovsdb_field = Field::new("test", Kind::Atomic(Atomic::Uuid).to_ovsdb_type());
+        let native_field = Field::native("test", &Kind::Atomic(Atomic::Uuid));
+        let ovsdb_field = Field::ovsdb("test", &Kind::Atomic(Atomic::Uuid));
         let expected = "struct Test {\n    test: ovsdb::protocol::Uuid,\n}\n";
 
         assert_eq!(&test_struct(&native_field), expected);
@@ -228,14 +258,8 @@ mod tests {
 
     #[test]
     fn test_field_enum() {
-        let native_field = Field::new(
-            "test",
-            Kind::Enum("Test".to_string(), Atomic::String).to_native_type(),
-        );
-        let ovsdb_field = Field::new(
-            "test",
-            Kind::Enum("Test".to_string(), Atomic::String).to_ovsdb_type(),
-        );
+        let native_field = Field::native("test", &Kind::Enum("Test".to_string(), Atomic::String));
+        let ovsdb_field = Field::ovsdb("test", &Kind::Enum("Test".to_string(), Atomic::String));
         let expected = "struct Test {\n    test: Test,\n}\n";
 
         assert_eq!(&test_struct(&native_field), expected);
@@ -244,14 +268,8 @@ mod tests {
 
     #[test]
     fn test_field_map() {
-        let native_field = Field::new(
-            "test",
-            Kind::Map(Atomic::String, Atomic::Integer).to_native_type(),
-        );
-        let ovsdb_field = Field::new(
-            "test",
-            Kind::Map(Atomic::String, Atomic::Integer).to_ovsdb_type(),
-        );
+        let native_field = Field::native("test", &Kind::Map(Atomic::String, Atomic::Integer));
+        let ovsdb_field = Field::ovsdb("test", &Kind::Map(Atomic::String, Atomic::Integer));
         let expected_native =
             "struct Test {\n    test: std::collections::BTreeMap<String, i64>,\n}\n";
         let expected_ovsdb = "struct Test {\n    test: ovsdb::protocol::Map<String, i64>,\n}\n";
@@ -262,13 +280,13 @@ mod tests {
 
     #[test]
     fn test_field_optional() {
-        let native_field = Field::new(
+        let native_field = Field::native(
             "test",
-            Kind::Optional(Box::new(Kind::Atomic(Atomic::Uuid))).to_native_type(),
+            &Kind::Optional(Box::new(Kind::Atomic(Atomic::Uuid))),
         );
-        let ovsdb_field = Field::new(
+        let ovsdb_field = Field::ovsdb(
             "test",
-            Kind::Optional(Box::new(Kind::Atomic(Atomic::Uuid))).to_ovsdb_type(),
+            &Kind::Optional(Box::new(Kind::Atomic(Atomic::Uuid))),
         );
         let expected_native = "struct Test {\n    test: Option<ovsdb::protocol::Uuid>,\n}\n";
         let expected_ovsdb =
@@ -280,14 +298,9 @@ mod tests {
 
     #[test]
     fn test_field_set() {
-        let native_field = Field::new(
-            "test",
-            Kind::Set(Box::new(Kind::Atomic(Atomic::String))).to_native_type(),
-        );
-        let ovsdb_field = Field::new(
-            "test",
-            Kind::Set(Box::new(Kind::Atomic(Atomic::String))).to_ovsdb_type(),
-        );
+        let native_field =
+            Field::native("test", &Kind::Set(Box::new(Kind::Atomic(Atomic::String))));
+        let ovsdb_field = Field::ovsdb("test", &Kind::Set(Box::new(Kind::Atomic(Atomic::String))));
         let expected_native = "struct Test {\n    test: Vec<String>,\n}\n";
         let expected_ovsdb = "struct Test {\n    test: ovsdb::protocol::Set<String>,\n}\n";
 
@@ -297,14 +310,8 @@ mod tests {
 
     #[test]
     fn test_field_uuid_set() {
-        let native_field = Field::new(
-            "test",
-            Kind::Set(Box::new(Kind::Atomic(Atomic::Uuid))).to_native_type(),
-        );
-        let ovsdb_field = Field::new(
-            "test",
-            Kind::Set(Box::new(Kind::Atomic(Atomic::Uuid))).to_ovsdb_type(),
-        );
+        let native_field = Field::native("test", &Kind::Set(Box::new(Kind::Atomic(Atomic::Uuid))));
+        let ovsdb_field = Field::ovsdb("test", &Kind::Set(Box::new(Kind::Atomic(Atomic::Uuid))));
         let expected_native = "struct Test {\n    test: Vec<ovsdb::protocol::Uuid>,\n}\n";
         let expected_ovsdb = "struct Test {\n    test: ovsdb::protocol::UuidSet,\n}\n";
 

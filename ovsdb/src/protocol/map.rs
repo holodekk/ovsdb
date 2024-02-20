@@ -8,6 +8,14 @@ use serde::{
     Deserialize, Serialize,
 };
 
+/// Rust representation of the OVSDB `map` data type.
+///
+/// The OVSDB `map` is a dictionary type, containing key/value pairs.  The `map` itself is
+/// represented on the wire as a tuple:
+///
+/// ```json
+/// ["map", {"key": "value"}]
+/// ```
 #[derive(Clone, Debug)]
 pub struct Map<K, V>(BTreeMap<K, V>)
 where
@@ -102,7 +110,7 @@ where
         {
             type Value = Map<K, V>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 formatter.write_str("`array`")
             }
 
@@ -113,7 +121,7 @@ where
                 match value.next_element::<String>()? {
                     Some(kind) => match kind.as_str() {
                         "map" => {
-                            let values: Vec<(K, V)> = value.next_element()?.unwrap();
+                            let values: Vec<(K, V)> = value.next_element()?.expect("map values");
                             let mut map: BTreeMap<K, V> = BTreeMap::new();
                             for (k, v) in values {
                                 map.insert(k, v);
@@ -151,8 +159,8 @@ mod tests {
     #[test]
     fn test_deserialize() -> Result<(), serde_json::Error> {
         let data = r#"["map",[["color","blue"]]]"#;
-        let map: Map<String, String> = serde_json::from_str(&data)?;
-        assert_eq!(map.get("color").unwrap(), "blue");
+        let map: Map<String, String> = serde_json::from_str(data)?;
+        assert_eq!(map.get("color").expect("color value"), "blue");
         Ok(())
     }
 }

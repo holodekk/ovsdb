@@ -4,6 +4,9 @@ use serde::{
     Deserialize, Serialize,
 };
 
+/// Optional value within OVSDB.
+///
+/// TODO: More
 #[derive(Clone, Debug, PartialEq)]
 pub struct Optional<T>(Option<T>);
 
@@ -38,8 +41,8 @@ where
         } else {
             let mut seq = serializer.serialize_seq(Some(2))?;
             seq.serialize_element("map")?;
-            let set: Vec<i32> = vec![];
-            seq.serialize_element(&set)?;
+            let vec: Vec<i32> = vec![];
+            seq.serialize_element(&vec)?;
             seq.end()
         }
     }
@@ -88,7 +91,7 @@ mod tests {
         }
 
         let data = r#"{"foo": ["set", []]}"#;
-        let value: Test = serde_json::from_str(&data).unwrap();
+        let value: Test = serde_json::from_str(data).expect("Test struct from str");
         assert_eq!(value.foo, Optional(None));
     }
 
@@ -100,7 +103,7 @@ mod tests {
         }
 
         let data = r#"{"foo": ["set", []]}"#;
-        let value: Test = serde_json::from_str(&data).unwrap();
+        let value: Test = serde_json::from_str(data).expect("Test struct from str");
         assert_eq!(value.foo, Optional(None));
     }
 
@@ -112,7 +115,7 @@ mod tests {
         }
 
         let data = r#"{"foo": ["uuid", "06234b93-6b4b-4f92-be8a-342dd858617c"]}"#;
-        let value: Test = serde_json::from_str(&data).unwrap();
+        let value: Test = serde_json::from_str(data).expect("Test struct from str");
         assert!(matches!(value.foo, Optional(Some(_))));
     }
 }

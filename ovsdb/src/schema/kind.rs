@@ -2,41 +2,108 @@ use std::str::FromStr;
 
 use serde::{
     de::{self, Deserializer, MapAccess, Visitor},
-    Deserialize,
+    Deserialize, Serialize,
 };
 
 use crate::protocol::Set;
 
 use super::Atomic;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+/// A reference to another object
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum RefType {
+    /// A strong reference (one that will always point to a valid entity)
     #[serde(rename = "strong")]
     Strong,
+    /// A weak reference (one whose target may not exist)
     #[serde(rename = "weak")]
     Weak,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+/// The most basic atomic type in OVSDB.
+///
+/// Includes optional constraints which control the values allowed in the [Column][super::Column].
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct BaseKind {
-    pub kind: Atomic,
-    pub choices: Option<Set<String>>,
-    pub min_integer: Option<i64>,
-    pub max_integer: Option<i64>,
-    pub min_real: Option<f64>,
-    pub max_real: Option<f64>,
-    pub min_length: Option<i64>,
-    pub max_length: Option<i64>,
-    pub ref_table: Option<String>,
-    pub ref_type: Option<RefType>,
+    kind: Atomic,
+    choices: Option<Set<String>>,
+    min_integer: Option<i64>,
+    max_integer: Option<i64>,
+    min_real: Option<f64>,
+    max_real: Option<f64>,
+    min_length: Option<i64>,
+    max_length: Option<i64>,
+    ref_table: Option<String>,
+    ref_type: Option<RefType>,
 }
 
 impl BaseKind {
-    pub fn new(kind: Atomic) -> Self {
+    #[must_use]
+    pub(crate) fn new(kind: Atomic) -> Self {
         Self {
             kind,
             ..BaseKind::default()
         }
+    }
+
+    /// The atomic kind stored in this [Column][super::Column].
+    #[must_use]
+    pub fn kind(&self) -> Atomic {
+        self.kind
+    }
+
+    /// If this [Column][super::Column] is an enumeration, returns the allowed values.
+    #[must_use]
+    pub fn choices(&self) -> Option<&Set<String>> {
+        self.choices.as_ref()
+    }
+
+    /// If this is an [Integer][Atomic::Integer] [Column][super::Column], the minimum value allowed.
+    #[must_use]
+    pub fn min_integer(&self) -> Option<&i64> {
+        self.min_integer.as_ref()
+    }
+
+    /// If this is an [Integer][Atomic::Integer] [Column][super::Column], the maximum value allowed.
+    #[must_use]
+    pub fn max_integer(&self) -> Option<&i64> {
+        self.max_integer.as_ref()
+    }
+
+    /// If this is an [Real][Atomic::Real] [Column][super::Column], the minimum value allowed.
+    #[must_use]
+    pub fn min_real(&self) -> Option<&f64> {
+        self.min_real.as_ref()
+    }
+
+    /// If this is an [Real][Atomic::Real] [Column][super::Column], the maximum value allowed.
+    #[must_use]
+    pub fn max_real(&self) -> Option<&f64> {
+        self.max_real.as_ref()
+    }
+
+    /// If this is an [String][Atomic::String] [Column][super::Column], the minimum length of the string.
+    #[must_use]
+    pub fn min_length(&self) -> Option<&i64> {
+        self.min_length.as_ref()
+    }
+
+    /// If this is an [String][Atomic::String] [Column][super::Column], the maximum length of the string.
+    #[must_use]
+    pub fn max_length(&self) -> Option<&i64> {
+        self.max_length.as_ref()
+    }
+
+    /// If this is a referential [Column][super::Column], the table the reference points to.
+    #[must_use]
+    pub fn ref_table(&self) -> Option<&str> {
+        self.ref_table.as_deref()
+    }
+
+    /// If this is a referential [Column][super::Column], the type of reference represented.
+    #[must_use]
+    pub fn ref_type(&self) -> Option<RefType> {
+        self.ref_type
     }
 }
 
@@ -50,7 +117,7 @@ impl<'de> Deserialize<'de> for BaseKind {
         impl<'de> Visitor<'de> for BaseKindVisitor {
             type Value = BaseKind;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 formatter.write_str("`map` or `string`")
             }
 
@@ -140,46 +207,77 @@ impl<'de> Deserialize<'de> for BaseKind {
     }
 }
 
-#[derive(Clone, Debug)]
+/// Represents the type of a database [Column][super::Column].
+#[derive(Clone, Debug, Serialize)]
 pub struct Kind {
-    pub key: BaseKind,
-    pub value: Option<BaseKind>,
-    pub min: i64,
-    pub max: i64,
+    key: BaseKind,
+    /// If present, represents the type of the value for a map type column.
+    value: Option<BaseKind>,
+    /// Minimum number of values allowed.
+    min: i64,
+    /// Maximum number of values allowed.
+    max: i64,
 }
 
 impl Kind {
-    pub fn new(key: BaseKind) -> Self {
+    #[must_use]
+    pub(crate) fn new(key: BaseKind) -> Self {
         Self {
             key,
             ..Self::default()
         }
     }
 
+    /// Either the raw value stored in the [Column][super::Column], or the type of key for a map type column.
+    #[must_use]
+    pub fn key(&self) -> &BaseKind {
+        &self.key
+    }
+
+    /// The type associated with the value in a map column.
+    #[must_use]
+    pub fn value(&self) -> Option<&BaseKind> {
+        self.value.as_ref()
+    }
+
+    /// Returs true if this is a simple scalar value.
+    #[must_use]
     pub fn is_scalar(&self) -> bool {
         self.value.is_none() && self.min == 1 && self.max == 1
     }
 
+    /// Returns true if this is an optional scalar value.
+    #[must_use]
     pub fn is_optional(&self) -> bool {
         self.min == 0 && self.max == 1
     }
 
+    /// Returns true if this is a set or map type.
+    #[must_use]
     pub fn is_composite(&self) -> bool {
         self.max > 1
     }
 
+    /// Returns true if this is a set type.
+    #[must_use]
     pub fn is_set(&self) -> bool {
         self.value.is_none() && (self.min != 1 || self.max != 1)
     }
 
+    /// Returns true if this is a map type.
+    #[must_use]
     pub fn is_map(&self) -> bool {
         self.value.is_some()
     }
 
+    /// Returns true if this is an enumeration.
+    #[must_use]
     pub fn is_enum(&self) -> bool {
         self.value.is_none() && self.key.choices.is_some()
     }
 
+    /// Returns true if this is an optional pointer to another table record.
+    #[must_use]
     pub fn is_optional_pointer(&self) -> bool {
         self.is_optional()
             && self.value.is_none()
@@ -208,7 +306,7 @@ impl<'de> Deserialize<'de> for Kind {
         impl<'de> Visitor<'de> for KindVisitor {
             type Value = Kind;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 formatter.write_str("`map` or `string`")
             }
 
@@ -284,21 +382,21 @@ mod tests {
     #[test]
     fn test_base_kind_integer_string() {
         let data = r#""integer""#;
-        let k: BaseKind = serde_json::from_str(data).unwrap();
+        let k: BaseKind = serde_json::from_str(data).expect("BaseKind");
         assert_eq!(k.kind, Atomic::Integer);
     }
 
     #[test]
     fn test_base_kind_integer_key() {
         let data = r#"{"type": "integer"}"#;
-        let k: BaseKind = serde_json::from_str(data).unwrap();
+        let k: BaseKind = serde_json::from_str(data).expect("BaseKind");
         assert_eq!(k.kind, Atomic::Integer);
     }
 
     #[test]
     fn test_base_kind_integer_full() {
         let data = r#"{"type": "integer", "minInteger": 1, "maxInteger": 100}"#;
-        let k: BaseKind = serde_json::from_str(data).unwrap();
+        let k: BaseKind = serde_json::from_str(data).expect("BaseKind");
         assert_eq!(k.kind, Atomic::Integer);
         assert_eq!(k.min_integer, Some(1));
         assert_eq!(k.max_integer, Some(100));
@@ -307,7 +405,7 @@ mod tests {
     #[test]
     fn test_kind_string() {
         let data = r#""boolean""#;
-        let k: Kind = serde_json::from_str(data).unwrap();
+        let k: Kind = serde_json::from_str(data).expect("Kind");
         assert_eq!(k.key.kind, Atomic::Boolean);
         assert_eq!(k.value, None);
         assert_eq!(k.min, 1);
@@ -317,7 +415,7 @@ mod tests {
     #[test]
     fn test_kind_simple_key() {
         let data = r#"{"key": "boolean"}"#;
-        let k: Kind = serde_json::from_str(data).unwrap();
+        let k: Kind = serde_json::from_str(data).expect("Kind");
         assert_eq!(k.key.kind, Atomic::Boolean);
         assert_eq!(k.value, None);
         assert_eq!(k.min, 1);
@@ -327,7 +425,7 @@ mod tests {
     #[test]
     fn test_kind_complex_key() {
         let data = r#"{"key": {"type": "boolean"}, "min": 1, "max": 100}"#;
-        let k: Kind = serde_json::from_str(data).unwrap();
+        let k: Kind = serde_json::from_str(data).expect("Kind");
         assert_eq!(k.key.kind, Atomic::Boolean);
         assert_eq!(k.value, None);
         assert_eq!(k.min, 1);

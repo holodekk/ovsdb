@@ -3,14 +3,22 @@ use serde_json::Value;
 
 use crate::{Error::ParseError, Result};
 
+/// A response to an OVSDB method call.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Response {
-    pub id: Option<super::Uuid>,
+    id: Option<super::Uuid>,
     result: Option<Value>,
-    pub error: Option<String>,
+    error: Option<String>,
 }
 
 impl Response {
+    /// Id of the original request (used for synchronization)
+    #[must_use]
+    pub fn id(&self) -> Option<&super::Uuid> {
+        self.id.as_ref()
+    }
+
+    /// Data returned by the server in response to a method call.
     pub fn result<T>(&self) -> Result<Option<T>>
     where
         T: DeserializeOwned,
@@ -23,9 +31,24 @@ impl Response {
             None => Ok(None),
         }
     }
+
+    /// Any error encountered by the server in processing the method call.
+    #[must_use]
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
 }
 
+/// Response to a `query` transact method call.
 #[derive(Debug, Deserialize)]
 pub struct ListResult<T> {
-    pub rows: Vec<T>,
+    rows: Vec<T>,
+}
+
+impl<T> ListResult<T> {
+    /// Rows returned by the server.
+    #[must_use]
+    pub fn rows(&self) -> &Vec<T> {
+        &self.rows
+    }
 }

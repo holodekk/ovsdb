@@ -97,7 +97,7 @@ pub(crate) struct EnumerationBuilder<'a> {
 }
 
 impl<'a> EnumerationBuilder<'a> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             name: None,
             attributes: Attributes::default(),
@@ -105,12 +105,12 @@ impl<'a> EnumerationBuilder<'a> {
         }
     }
 
-    pub fn name(&mut self, name: &'a str) -> &mut Self {
+    pub(crate) fn name(&mut self, name: &'a str) -> &mut Self {
         self.name = Some(name);
         self
     }
 
-    pub fn attribute<T>(&mut self, attr: T) -> &mut Self
+    pub(crate) fn attribute<T>(&mut self, attr: T) -> &mut Self
     where
         T: AsRef<str>,
     {
@@ -118,7 +118,7 @@ impl<'a> EnumerationBuilder<'a> {
         self
     }
 
-    pub fn value<S>(&mut self, value: S) -> &mut Self
+    pub(crate) fn value<S>(&mut self, value: S) -> &mut Self
     where
         S: AsRef<str>,
     {
@@ -133,7 +133,7 @@ impl<'a> EnumerationBuilder<'a> {
         self
     }
 
-    pub fn values<T, S>(&mut self, values: T) -> &mut Self
+    pub(crate) fn values<T, S>(&mut self, values: T) -> &mut Self
     where
         T: IntoIterator<Item = S>,
         S: AsRef<str>,
@@ -144,9 +144,9 @@ impl<'a> EnumerationBuilder<'a> {
         self
     }
 
-    pub fn build(&self) -> Enumeration {
+    pub(crate) fn build(&self) -> Enumeration {
         Enumeration {
-            ident: name_to_ident(str_to_name(self.name.unwrap())),
+            ident: name_to_ident(str_to_name(self.name.expect("name"))),
             attributes: self.attributes.clone(),
             values: self.values.clone(),
         }
@@ -179,10 +179,10 @@ pub enum Test {
             .value("green")
             .build();
         let mut buffer = Vec::new();
-        let parsed: syn::File = syn::parse2(quote! { #value }).unwrap();
+        let parsed: syn::File = syn::parse2(quote! { #value }).expect("parsed");
         buffer
             .write_all(prettyplease::unparse(&parsed).as_bytes())
-            .unwrap();
-        assert_eq!(String::from_utf8(buffer).unwrap(), expected);
+            .expect("parsed");
+        assert_eq!(String::from_utf8(buffer).expect("utf8 string"), expected);
     }
 }

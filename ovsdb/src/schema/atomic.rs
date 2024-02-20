@@ -3,14 +3,20 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+/// Represents the low-level scalar type contained in an OVSDB [Column][super::Column].
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Atomic {
+    /// [bool] value
     Boolean,
+    /// [i64] value
     Integer,
+    /// [f64] value
     Real,
+    /// [String] value
     #[default]
     String,
+    /// Unique identifier conforming to the UUID v4 specification
     Uuid,
 }
 
@@ -48,7 +54,7 @@ mod tests {
     #[test]
     fn test_atomic_deserialize_boolean() {
         let data = r#""boolean""#;
-        let a: Atomic = serde_json::from_str(data).unwrap();
+        let a: Atomic = serde_json::from_str(data).expect("bool from str");
         assert_eq!(a, Atomic::Boolean);
     }
 }

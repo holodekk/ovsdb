@@ -72,9 +72,13 @@ impl<'a> Entity<'a> {
                 .native_fields()
                 .iter()
                 .map(|f| {
-                    let fident = f.ident();
-                    let oident = name_to_ident("other");
-                    parse_quote! { #fident: #oident.#fident.into() }
+                    let field_ident = f.ident();
+                    let other_ident = name_to_ident("other");
+                    if f.is_atomic() {
+                        parse_quote! { #field_ident: #other_ident.#field_ident }
+                    } else {
+                        parse_quote! { #field_ident: #other_ident.#field_ident.into() }
+                    }
                 })
                 .collect(),
         )
@@ -109,27 +113,31 @@ impl<'a> Entity<'a> {
                 .proxy_fields()
                 .iter()
                 .map(|f| {
-                    let fident = f.ident();
-                    let oident = name_to_ident("other");
-                    parse_quote! { #fident: #oident.#fident.into() }
+                    let field_ident = f.ident();
+                    let other_ident = name_to_ident("other");
+                    if f.is_atomic() {
+                        parse_quote! { #field_ident: #other_ident.#field_ident }
+                    } else {
+                        parse_quote! { #field_ident: #other_ident.#field_ident.into() }
+                    }
                 })
                 .collect(),
         )
     }
 
-    pub fn from_table(table: &'a Table) -> Self {
+    pub(crate) fn from_table(table: &'a Table) -> Self {
         let mut native_fields: Vec<Field> = vec![];
         let mut proxy_fields: Vec<Field> = vec![];
         let mut enumerations: Vec<Enumeration> = vec![];
 
-        table.columns.iter().for_each(|c| {
+        table.columns().iter().for_each(|c| {
             let kind = Kind::from_column(c);
-            native_fields.push(Field::new(&c.name, kind.to_native_type()));
-            proxy_fields.push(Field::new(&c.name, kind.to_ovsdb_type()));
+            native_fields.push(Field::native(c.name(), &kind));
+            proxy_fields.push(Field::ovsdb(c.name(), &kind));
 
-            if let Some(choices) = c.kind.key.choices.as_ref() {
+            if let Some(choices) = c.kind().key().choices().as_ref() {
                 enumerations.push(Enumeration::builder()
-                    .name(&c.name)
+                    .name(c.name())
                     .attribute(
                         "#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]",
                     )
@@ -139,14 +147,14 @@ impl<'a> Entity<'a> {
         });
 
         Self {
-            name: &table.name,
+            name: table.name(),
             native_fields,
             proxy_fields,
             enumerations,
         }
     }
 
-    pub fn to_file<P>(&self, filename: P) -> super::Result<()>
+    pub(crate) fn to_file<P>(&self, filename: P) -> super::Result<()>
     where
         P: AsRef<Path>,
     {

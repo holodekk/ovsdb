@@ -1,12 +1,30 @@
-use std::convert::TryFrom;
+//! Available OVSDB methods.
 
+use erased_serde::Serialize as ErasedSerialize;
 use serde::{Serialize, Serializer};
 
-#[derive(Debug, PartialEq)]
+mod echo;
+pub use echo::{EchoParams, EchoResult};
+
+mod get_schema;
+pub use get_schema::{GetSchemaParams, GetSchemaResult};
+
+mod list_dbs;
+pub use list_dbs::ListDbsResult;
+
+mod transact;
+pub use transact::{Operation, TransactParams};
+
+/// OVSDB method.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Method {
+    /// OVSDB `echo` method.
     Echo,
+    /// OVSDB `list_dbs` method.
     ListDatabases,
+    /// OVSDB `get_schema` method.
     GetSchema,
+    /// OVSDB `transact` method.
     Transact,
     // Cancel,
     // Monitor,
@@ -47,3 +65,9 @@ impl TryFrom<String> for Method {
         }
     }
 }
+
+/// Trait specifying requirements for a valid OVSDB wire request.
+///
+/// Primary exists to ensure type-safety.
+pub trait Params: ErasedSerialize + Send + std::fmt::Debug {}
+erased_serde::serialize_trait_object!(Params);
