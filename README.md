@@ -49,7 +49,7 @@ or by adding it directly to `Cargo.toml`
 # Cargo.toml
 # ...
 [build-dependencies]
-ovsdb-build = { version = "0.0.3" }
+ovsdb-build = { version = "0.0.4" }
 ```
 
 Next, add a build script to your project, passing it the path to the schema file we downloaded previously:
