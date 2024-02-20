@@ -148,6 +148,12 @@ Got some bridges: [
 
 Congratulations. You've just had your first Rust conversation with OVSDB. For further reading, check out the [examples](https://git.dubzland.com/holodekk/ovsdb/-/tree/main/examples/) directory in the `ovsdb` repository, or the [docs][docsrs-url].
 
+## Contributing
+
+As this crate is heavily WIP, contributions are extremely welcome. Check out
+the [contributing guide][guide] to get involved.
+[guide]: CONTRIBUTING.md
+
 ## License
 
 This project is licensed under the [MIT license](LICENSE.md).
