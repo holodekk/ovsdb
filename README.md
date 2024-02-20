@@ -24,20 +24,33 @@ to interact with them.
 
 For instance, let's assume you want to interact with the Open vSwitch database.
 The first thing you'll need to do is obtain a copy of the schema (usually stored
-with a `.ovsschema` extension). The schema file can be found in the [repository](https://github.com/openvswitch/ovs/blob/master/vswitchd/vswitch.ovsschema), or obtained by connecting directly to an OVSDB instance. If you're running Open vSwitch, then a copy of OVSDB is already running on your machine (usually listening on a local socket).
-For example, on my local machine, I can connect and download a copy of the schema with the following command:
+with a `.ovsschema` extension). The schema file can be found in the
+[repository][vswitch_schema], or obtained by connecting directly to an OVSDB
+instance. If you're running Open vSwitch, then a copy of OVSDB is already
+running on your machine (usually listening on a local socket). For example, on
+my local machine, I can connect and download a copy of the schema with the
+following command:
 
 ```sh
 # ovsdb-client get-schema /var/run/openvswitch/db.sock > vswitch.ovsschema
 ```
 
-Note that connecting to the OVSDB socket requires root priveleges. Before proceeding, it is probably worth taking a look at the schema file itself, as the OVSDB schema introduces a few concepts not present in other database systems.
+Note that connecting to the OVSDB socket requires root priveleges. Before
+proceeding, it is probably worth taking a look at the schema file itself, as the
+OVSDB schema introduces a few concepts not present in other database systems.
 
-With the schema file present, you can now proceed to build your first client application. The first step is to build built structs to represent the diffrerent tables in the database, as well as proxy objects to handle mapping from the esoteric format of the OVSDB protocol into more sane Rust representations. Next, a TCP or Unix socket client is needed depending on how you intend to interface with the database itself. Thankfully, both of those tasks have already been handled for you.
+With the schema file present, you can now proceed to build your first client
+application. The first step is to build built structs to represent the
+diffrerent tables in the database, as well as proxy objects to handle mapping
+from the esoteric format of the OVSDB protocol into more sane Rust
+representations. Next, a TCP or Unix socket client is needed depending on how
+you intend to interface with the database itself. Thankfully, both of those
+tasks have already been handled for you.
 
 ## Model generation
 
-First, we need to use `ovsdb-build` to generate our models and proxies. Add it as a build dependency of your project, either via shell command:
+First, we need to use `ovsdb-build` to generate our models and proxies. Add it
+as a build dependency of your project, either via shell command:
 
 ```sh
 $ cargo add --build ovsdb-build
@@ -52,7 +65,8 @@ or by adding it directly to `Cargo.toml`
 ovsdb-build = { version = "0.0.4" }
 ```
 
-Next, add a build script to your project, passing it the path to the schema file we downloaded previously:
+Next, add a build script to your project, passing it the path to the schema
+file we downloaded previously:
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -63,19 +77,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Database access
 
-Now that we have our build process established, its time to move on to the actual application code. There are three main aspects to the OVSDB integration:
+Now that we have our build process established, its time to move on to the
+actual application code. There are three main aspects to the OVSDB integration:
 
 - importing the generated models
 - connecting to the database
 - issuing methods to the database and receiving responses
 
-As an example, we're going to write just enough code to query the list of Open vSwitch bridges. This should be enough to ensure a functional implementation. For more, check out the available [examples](examples/). Before proceeding, make sure that `ovsdb` has been added as a dependency, with the `client` feature enabled.
+As an example, we're going to write just enough code to query the list of Open
+vSwitch bridges. This should be enough to ensure a functional implementation.
+For more, check out the available [examples](examples/). Before proceeding,
+make sure that `ovsdb` has been added as a dependency, with the `client` feature
+enabled.
 
 ```sh
 $ cargo add ovsdb --features client
 ```
 
-The `ovsdb` models require the `serde` framework for encoding/decoding the OVSDB protocol data:
+The `ovsdb` models require the `serde` framework for encoding/decoding the OVSDB
+protocol data:
 
 ```sh
 $ cargo add serde --features derive
@@ -146,7 +166,10 @@ Got some bridges: [
 ]
 ```
 
-Congratulations. You've just had your first Rust conversation with OVSDB. For further reading, check out the [examples](https://git.dubzland.com/holodekk/ovsdb/-/tree/main/examples/) directory in the `ovsdb` repository, or the [docs][docsrs-url].
+Congratulations. You've just had your first Rust conversation with OVSDB. For
+further reading, check out the
+[examples](https://git.dubzland.com/holodekk/ovsdb/-/tree/main/examples/)
+directory in the `ovsdb` repository, or the [docs][docsrs-url].
 
 ## Contributing
 
@@ -177,3 +200,4 @@ This project is licensed under the [MIT license](LICENSE.md).
 [2]: https://www.openvswitch.org/
 [3]: https://docs.ovn.org/en/latest/contents.html
 [4]: https://datatracker.ietf.org/doc/html/rfc7047
+[vswitch_schema]: https://github.com/openvswitch/ovs/blob/master/vswitchd/vswitch.ovsschema
