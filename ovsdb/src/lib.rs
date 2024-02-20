@@ -60,7 +60,7 @@
 //! Next, add a build script to your project, passing it the path to the schema
 //! file we downloaded previously:
 //!
-//! ```rust
+//! ```rust,ignore
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     ovsdb_build::configure().compile("/path/to/vswitch.ovsschema", "vswitch")?;
 //!     Ok(())
@@ -101,7 +101,7 @@
 //!
 //! With the requirements in place, we can build our first client. In `main.rs`:
 //!
-//! ```rust
+//! ```rust,ignore
 //! use std::path::Path;
 //!
 //! use ovsdb::{
