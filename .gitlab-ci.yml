@@ -5,6 +5,7 @@ stages:
   - test
   - lint
   - build
+  - deploy
 
 cache: &global_cache
   key:
@@ -55,3 +56,10 @@ build:
     - cargo --version
   script:
     - cargo build
+
+release:
+  stage: deploy
+  script:
+    - cargo publish -p ovsdb
+  rules:
+    - if: $CI_COMMIT_TAG
