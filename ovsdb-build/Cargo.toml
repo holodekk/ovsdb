@@ -6,7 +6,7 @@ repository = "https://git.dubzland.net/holodekk/ovsdb-rust.git"
 license-file = "LICENSE"
 
 [dependencies]
-ovsdb = { path = "../ovsdb" }
+ovsdb = "0.0.5"
 convert_case = "0.6.0"
 quote = "1.0"
 proc-macro2 = "1.0"
