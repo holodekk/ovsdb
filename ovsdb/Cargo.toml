@@ -3,12 +3,12 @@ name = "ovsdb"
 description = """
 Rust implementation of the OVSDB schema and wire protocol.
 """
-documentation = "https://docs.rs/ovsdb/0.0.4"
+documentation = "https://docs.rs/ovsdb/0.0.5"
 edition = "2021"
 homepage = "https://git.dubzland.com/holodekk/ovsdb"
 authors = ["Josh Williams <jdubz@holodekk.io>"]
 categories = ["network-programming", "database-interfaces"]
-version = "0.0.4"
+version = "0.0.5"
 repository = "https://git.dubzland.com/holodekk/ovsdb.git"
 license = "MIT"
 readme = "../README.md"
