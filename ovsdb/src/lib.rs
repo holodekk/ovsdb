@@ -90,9 +90,12 @@ mod result;
 
 #[cfg(feature = "client")]
 pub mod client;
+#[cfg(feature = "protocol")]
 pub mod protocol;
+#[cfg(feature = "schema")]
 pub mod schema;
 
+#[cfg(feature = "client")]
 pub use client::Client;
 pub use result::*;
 

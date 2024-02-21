@@ -1,3 +1,4 @@
+#[cfg(feature = "protocol")]
 use crate::protocol::CodecError;
 
 /// This type represents all errors that can occur within OVSDB.
@@ -15,6 +16,7 @@ pub enum Error {
     /// A general IO error occurred while reading data from a file.
     #[error("Error reading data from file")]
     ReadError(#[source] std::io::Error),
+    #[cfg(feature = "protocol")]
     /// A failure occurred while processing communications between client and server.
     #[error("An error occurred when communicating with the server")]
     CommunicationFailure(#[from] CodecError),

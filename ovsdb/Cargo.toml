@@ -34,7 +34,9 @@ uuid = { version = "1.5.0", features = ["v4", "serde"] }
 tokio-test = { version = "0.4.0" }
 
 [features]
-client = []
+schema = []
+protocol = ["schema"]
+client = ["protocol"]
 default = ["client"]
 
 [package.metadata.docs.rs]
