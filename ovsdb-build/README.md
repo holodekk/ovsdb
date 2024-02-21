@@ -1,7 +1,7 @@
 # ovsdb-build
 
 Compiles an OVSDB schema into Rust models and proxies for typed database
-interaction.
+interaction in [`ovsdb`].
 
 ## Overview
 
@@ -59,3 +59,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+## License
+
+This project is licensed under the [MIT license](LICENSE.md).
+
+## Author
+
+- [Josh Williams](https://dubzland.com)
+
+[`ovsdb`]: https://docs.rs/ovsdb

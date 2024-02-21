@@ -1,18 +1,18 @@
 [package]
 name = "ovsdb-build"
 description = "OVSDB schema compiler"
-documentation = "https://docs.rs/ovsdb-build/0.0.5"
+documentation = "https://docs.rs/ovsdb-build/0.0.6"
 edition = "2021"
 homepage = "https://git.dubzland.com/holodekk/ovsdb"
 authors = ["Josh Williams <jdubz@holodekk.io>"]
 categories = ["network-programming", "database-interfaces"]
-version = "0.0.5"
+version = "0.0.6"
 repository = "https://git.dubzland.com/holodekk/ovsdb.git"
 license = "MIT"
 readme = "README.md"
 
 [dependencies]
-ovsdb = "0.0.5"
+ovsdb = { version = "0.0.6", path = "../ovsdb" }
 convert_case = "0.6.0"
 quote = "1.0"
 proc-macro2 = "1.0"

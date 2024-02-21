@@ -1,5 +1,5 @@
 //! `ovsdb-build` compiles OVSDB schema objects into rust entity definitions and proxies for use with
-//! `ovsdb`
+//! [`ovsdb`].
 //!
 //! # Dependencies
 //!
@@ -10,15 +10,19 @@
 //!
 //! [build-dependencies]
 //! ovsdb-build = <ovsdb-version>
+//! ```
 //!
 //! # Examples
 //!
 //! ```rust,no_run
+//! // build.rs
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     ovsdb_build::configure().compile("/path/to/vswitch.ovsschema", "vswitch");
 //!     Ok(())
 //! }
 //! ```
+//!
+//! [`ovsdb`]: https://docs.rs/ovsdb
 
 // Built-in Lints
 #![warn(

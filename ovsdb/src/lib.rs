@@ -1,6 +1,6 @@
-//! A Rust implementation of the [OVSDB][1] schema and wire format.
+//! A Rust implementation of the `OVSDB` schema and wire format.
 //!
-//! [`ovsdb`] provides a Rust interface to an OVSDB server. It utilizes [`serde`]
+//! [`ovsdb`] provides a Rust interface to an `OVSDB` server. It utilizes [`serde`]
 //! for protocol processing and [`tokio`] for asynchronous io. Its features
 //! include:
 //!
@@ -13,7 +13,7 @@
 //! Interacting with a database server is a 3-step process.
 //!
 //! 1. Load a copy of the [Schema][schema::Schema] for the database
-//! 1. Build `rust` modules represent the [Table][schema::Table]s in the schema
+//! 1. Build `rust` modules represent the [Table][schema::Table]'s in the schema
 //! 1. Connect to the database via a [Client][client::Client] and execute methods
 //!
 //! Steps 1 and 2 above are handled by [`ovsdb-build`].
@@ -35,7 +35,7 @@
 //! ```rust,no_run
 //! use std::path::Path;
 //!
-//! use ovsdb::Client;
+//! use ovsdb::{Client, protocol::method::EchoResult};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), std::io::Error> {
@@ -43,7 +43,8 @@
 //!         .await
 //!         .unwrap();
 //!
-//!     let res = &client.echo(vec!["Hello", "OVSDB"]).await.unwrap();
+//!     let result: EchoResult = client.echo(vec!["Hello", "OVSDB"]).await.unwrap();
+//!     assert_eq!(*result, vec!["Hello".to_string(), "OVSDB".to_string()]);
 //!
 //!     client.stop().await.unwrap();
 //!
@@ -51,6 +52,7 @@
 //! }
 //! ```
 //!
+//! [`ovsdb`]: https://docs.rs/ovsdb
 //! [`ovsdb-build`]: https://docs.rs/ovsdb-build
 //! [`serde`]: https://docs.rs/serde
 //! [`tokio`]: https://docs.rs/tokio
