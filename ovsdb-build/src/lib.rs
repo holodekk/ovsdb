@@ -15,7 +15,7 @@
 //!
 //! ```rust,no_run
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     ovsdb_build::configure().compile("vswitch.ovsschema", "vswitch");
+//!     ovsdb_build::configure().compile("/path/to/vswitch.ovsschema", "vswitch");
 //!     Ok(())
 //! }
 //! ```

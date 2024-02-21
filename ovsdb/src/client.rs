@@ -100,11 +100,15 @@ enum ClientCommand {
 /// # Examples
 ///
 /// ```rust,no_run
-/// use ovsdb::client::Client;
+/// use std::path::Path;
 ///
+/// use ovsdb::Client;
+///
+/// # tokio_test::block_on(async {
 /// let client = Client::connect_unix(Path::new("/var/run/openvswitch/db.sock"))
 ///     .await
 ///     .unwrap();
+/// # })
 /// ```
 #[derive(Debug)]
 pub struct Client {
@@ -146,9 +150,11 @@ impl Client {
     /// ```rust,no_run
     /// use ovsdb::client::Client;
     ///
+    /// # tokio_test::block_on(async {
     /// let client = Client::connect_tcp("127.0.0.1:6641")
     ///     .await
     ///     .unwrap();
+    /// # })
     /// ```
     pub async fn connect_tcp<T>(server_addr: T) -> Result<Self, ClientError>
     where
@@ -165,11 +171,15 @@ impl Client {
     /// # Examples
     ///
     /// ```rust,no_run
+    /// use std::path::Path;
+    ///
     /// use ovsdb::client::Client;
     ///
+    /// # tokio_test::block_on(async {
     /// let client = Client::connect_unix(Path::new("/var/run/openvswitch/db.sock"))
     ///     .await
     ///     .unwrap();
+    /// # })
     /// ```
     pub async fn connect_unix(socket: &Path) -> Result<Self, ClientError> {
         let stream = UnixStream::connect(socket)
@@ -183,8 +193,11 @@ impl Client {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use ovsdb::client::Client;
+    /// use std::path::Path;
     ///
+    /// use ovsdb::Client;
+    ///
+    /// # tokio_test::block_on(async {
     /// let client = Client::connect_unix(Path::new("/var/run/openvswitch/db.sock"))
     ///     .await
     ///     .unwrap();
@@ -192,6 +205,7 @@ impl Client {
     /// // Perform OVSDB operations
     ///
     /// client.stop().await.unwrap();
+    /// # })
     pub async fn stop(mut self) -> Result<(), ClientError> {
         if let Some(sender) = self.command_sender.take() {
             sender
@@ -214,25 +228,33 @@ impl Client {
     /// those methods are insufficient, raw requests can be made to the database.
     ///
     /// ```rust,no_run
+    /// use std::path::Path;
+    ///
+    /// use serde::Serialize;
     ///
     /// use ovsdb::client::Client;
-    /// use ovsdb::protocol::{request::Params, method::Method};
+    /// use ovsdb::protocol::{Request, method::Params, method::Method};
     ///
+    /// #[derive(Debug, Serialize)]
     /// struct MyParams {
     ///   values: Vec<i32>,
     /// }
     ///
     /// impl Params for MyParams {}
     ///
-    /// let request = Request::new(Method::Echo, MyParams { values: vec![1, 2, 3] });
+    /// let params = MyParams { values: vec![1, 2, 3] };
+    /// let request = Request::new(Method::Echo, Some(Box::new(params)));
     ///
+    /// # tokio_test::block_on(async {
     /// let client = Client::connect_unix(Path::new("/var/run/openvswitch/db.sock"))
     ///     .await
     ///     .unwrap();
     ///
-    /// if let Some(result) = client.execute(request).await.unwrap() {
-    ///   println!("result: {}", result);
+    /// let result: Option<Vec<i32>> = client.execute(request).await.unwrap();
+    /// if let Some(r) = result {
+    ///   assert_eq!(r, vec![1, 2, 3]);
     /// }
+    /// # })
     /// ```
     pub async fn execute<T>(&self, request: Request) -> Result<Option<T>, ClientError>
     where
@@ -258,9 +280,11 @@ impl Client {
     /// On success, the arguments to the request are returned as the result.
     ///
     /// ```rust,no_run
+    /// use std::path::Path;
     ///
     /// use ovsdb::client::Client;
     ///
+    /// # tokio_test::block_on(async {
     /// let client = Client::connect_unix(Path::new("/var/run/openvswitch/db.sock"))
     ///     .await
     ///     .unwrap();
@@ -268,6 +292,7 @@ impl Client {
     /// let args = vec!["Hello", "OVSDB"];
     /// let result = client.echo(args.clone()).await.unwrap();
     /// assert_eq!(*result, args);
+    /// # })
     /// ```
     pub async fn echo<T, I>(&self, args: T) -> Result<EchoResult, ClientError>
     where
@@ -291,15 +316,18 @@ impl Client {
     /// On success, a list of databases supported by the server are returned.
     ///
     /// ```rust,no_run
+    /// use std::path::Path;
     ///
-    /// use ovsdb::client::Client;
+    /// use ovsdb::Client;
     ///
+    /// # tokio_test::block_on(async {
     /// let client = Client::connect_unix(Path::new("/var/run/openvswitch/db.sock"))
     ///     .await
     ///     .unwrap();
     ///
     /// let dbs = client.list_databases().await.unwrap();
-    /// println!("available databases: {}", dbs);
+    /// println!("available databases: {:#?}", dbs);
+    /// # })
     /// ```
     pub async fn list_databases(&self) -> Result<ListDbsResult, ClientError> {
         match self
@@ -317,15 +345,18 @@ impl Client {
     /// database.
     ///
     /// ```rust,no_run
+    /// use std::path::Path;
     ///
-    /// use ovsdb::client::Client;
+    /// use ovsdb::Client;
     ///
+    /// # tokio_test::block_on(async {
     /// let client = Client::connect_unix(Path::new("/var/run/openvswitch/db.sock"))
     ///     .await
     ///     .unwrap();
     ///
     /// let schema = client.get_schema("Open_vSwitch").await.unwrap();
-    /// println!("Open_vSwitch schema: {}", schema);
+    /// println!("Open_vSwitch schema: {:#?}", schema);
+    /// # })
     /// ```
     pub async fn get_schema<S>(&self, database: S) -> Result<Schema, ClientError>
     where
