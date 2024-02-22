@@ -18,6 +18,7 @@ quote = "1.0"
 proc-macro2 = "1.0"
 prettyplease = "0.2.16"
 syn = { version = "2", default-features = false, features = [
+  "clone-impls",
   "derive",
   "full",
   "parsing",

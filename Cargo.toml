@@ -1,5 +1,6 @@
 [workspace]
 members = ["ovsdb", "ovsdb-build"]
+resolver = "2"
 
 [workspace.dependencies]
 ovsdb = { path = "./ovsdb", features = ["client", "schema"] }
